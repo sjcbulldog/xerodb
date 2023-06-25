@@ -2,10 +2,19 @@ import path from 'path';
 import { exit } from 'process';
 import sqlite3 from 'sqlite3' ;
 import { User } from './User' ;
+import * as cyprto from 'crypto' ;
 
 export class UserService {
-    readonly userFileName: string = 'user.db' ;
-    readonly missingErrorMessage: string = 'SQLITE_CANTOPEN' ;
+    private readonly userFileName: string = 'user.db' ;
+    private readonly missingErrorMessage: string = 'SQLITE_CANTOPEN' ;
+
+    private static readonly statePending = 'PENDING' ;
+    private static readonly stateActive = 'ACTIVE' ;
+    private static readonly stateDisabled = 'DISABLED' ;
+
+    public static readonly UnknownUserError = "USER_SERVICE_UNKNOWN_USER" ;
+    public static readonly IncorrectPasswordError = "USER_SERVICE_INCORRECT_PASSWORD" ;
+    public static readonly UserNotActiveError = "USER_SERVICE_USER_NOT_ACTIVE" ;
 
     nextkey_ : number ;
     dbpath_ : string ;
@@ -33,7 +42,33 @@ export class UserService {
         }) ;
     }
 
-    public addUser(username: string, password: string, lastname: string, firstname: string, email: string, roles: string[]) : Error | null {
+    public canUserLogin(username: string, password: string) : Error | User {
+        let ret : Error | User = new Error(UserService.UnknownUserError) ;
+
+        if (!this.users_.has(username)) {
+            ret = new Error(UserService.UnknownUserError);
+        }
+        else {
+            let u: User = this.users_.get(username)!;
+
+            let hashed : string = this.hashPassword(password) ;
+            if (hashed !== u.password_) {
+                ret = new Error(UserService.IncorrectPasswordError);
+            }
+            else {
+                if (u.state_ !== UserService.stateActive) {
+                    ret = new Error(UserService.UserNotActiveError);
+                }
+                else {
+                    ret = u ;
+                }
+            }
+        }
+
+        return ret ;
+    }
+
+    public addUser(username: string, password: string, lastname: string, firstname: string, email: string, state: string | null, roles: string[]) : Error | null {
         let ret: Error | null = null ;
 
         if (this.users_.has(username)) {
@@ -48,29 +83,40 @@ export class UserService {
                 rolestr += role ;
             }
 
-            password = hashPassword(password);
+            password = this.hashPassword(password);
+
+            if (state === null) {
+                state = UserService.statePending;
+            }
 
             let sql = 'INSERT INTO users VALUES (' ;
             sql += String(this.nextkey_) + ',';
             sql += '"' + username + '",' ;
-            sql += '"' + password + '"," ;'
+            sql += '"' + password + '",' ;
             sql += '"' + lastname + '",' ;
             sql += '"' + firstname + '",' ;
             sql += '"' + email + '",' ;
+            sql += '"' + state + '",' ;
             sql += '"' + rolestr + '");' ;
             this.db_.exec(sql, (err) => {
                 if (err) {
                     console.log('UserService: failed to add user "' + username + '" to the database - ' + err) ;
+                    console.log('sql: "' + sql + '"') ;
                 }
                 else {
-                    let u: User = new User(this.nextkey_, username, password, lastname, firstname, email, rolestr);
+                    let u: User = new User(this.nextkey_, username, password, lastname, firstname, email, state!, rolestr);
                     this.users_.set(username, u) ;
                     this.nextkey_++ ;
+                    console.log('UserService: added username "' + username + '" to the database');
                 }
             }) ;
         }
 
         return ret;
+    }
+    
+    private hashPassword(pass: string) : string {
+        return cyprto.createHash('sha256').update(pass).digest('hex');
     }
 
     private createDatabaseAndTables() {
@@ -83,7 +129,7 @@ export class UserService {
             else {
                 this.createTables() ;
                 let roles : string[] = ['admin'] ;
-                this.addUser('admin', 'grond1425', 'Griffin', 'Butch', 'butchg@comcast.net', roles);
+                this.addUser('admin', 'grond1425', 'Griffin', 'Butch', 'butchg@comcast.net', UserService.stateActive, roles);
             }
         }) ;
     }
@@ -97,6 +143,7 @@ export class UserService {
                 lastname text not null,
                 firstname text not null,
                 email text not null,
+                state text not null,
                 roles text);
             ` ;
         this.db_.exec(sql)
@@ -105,7 +152,7 @@ export class UserService {
     private loadUsers() {
         let sql = 
             `
-            select id, username, lastname, firstname, email from users;
+            select id, username, password, lastname, firstname, email, state, roles from users;
             `;
         this.db_.all(sql, (err, rows) => {
             rows.forEach(row => {
@@ -117,6 +164,7 @@ export class UserService {
                 const lastnameKey = 'lastname' as ObjectKey ;
                 const firstnameKey = 'firstname' as ObjectKey ;
                 const emailKey = 'email' as ObjectKey ;
+                const stateKey = 'state' as ObjectKey ;
                 const rolesKey = 'roles' as ObjectKey ;
 
                 let id = obj[idKey] as unknown ;
@@ -125,9 +173,10 @@ export class UserService {
                 let lastname = obj[lastnameKey] as unknown ;
                 let firstname = obj[firstnameKey] as unknown ;
                 let email = obj[emailKey] as unknown ;
+                let state = obj[stateKey] as unknown ;
                 let roles = obj[rolesKey] as unknown ;
                 let u: User = new User(id as number, username as string, password as string, lastname as string, 
-                                        firstname as string, email as string, roles as string) ;
+                                        firstname as string, email as string, state as string, roles as string) ;
                 this.users_.set(username as string, u) ;
             })
         });
