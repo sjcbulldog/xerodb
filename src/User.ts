@@ -11,7 +11,7 @@ export class User {
     roles_ : string[];
     cookie_ : string ;
 
-    constructor(id: number, username: string, password: string, lastname: string, firstname: string, email: string, state: string, roles: string) {
+    constructor(id: number, username: string, password: string, lastname: string, firstname: string, email: string, state: string, roles: string[]) {
         this.id_ = id ;
         this.username_ = username ;
         this.password_ = password ;
@@ -19,7 +19,7 @@ export class User {
         this.firstname_ = firstname ;
         this.email_ = email ;
         this.state_ = state ;
-        this.roles_ = roles.split(',');
+        this.roles_ = roles;
         this.cookie_ = "" ;
     }
 

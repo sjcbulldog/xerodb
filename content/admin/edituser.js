@@ -1,6 +1,7 @@
 function getOneUser() {
     $.getJSON('/users/userinfo?username=' + usernamevalue, (data) => {
-        $('#username').html('<b>UserName: ' + data.username + '</b>') ;
+        $('#usernametext').html('<b>UserName: ' + data.username + '</b>') ;
+        $('#username').val(data.username);
         $('#firstname').val(data.firstname) ;
         $('#lastname').val(data.lastname) ;
         $('#email').val(data.email);
@@ -8,7 +9,7 @@ function getOneUser() {
         var roles = "" ;
         console.log('length: ' + data.roles.length);
         if (data.roles.length === 0 || (data.roles.length == 1 && data.roles[0].length == 0)) {
-            roles = "None" ;
+            roles = "" ;
         }
         else {
             for(var role of data.roles) {

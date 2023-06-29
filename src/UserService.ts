@@ -21,6 +21,8 @@ export class UserService {
     private static readonly confirmString: string = '/users/confirm' ;
     private static readonly userInfoString: string = '/users/userinfo' ;
 
+    private static readonly cookieName: string = 'xeropartdb';
+
     private static readonly stateNew = 'NEW' ;
     private static readonly statePending = 'PENDING' ;
     private static readonly stateActive = 'ACTIVE' ;
@@ -76,7 +78,13 @@ export class UserService {
     private updateUser(u: User) {
         let sql : string = 'UPDATE users SET ' ;
         sql += 'state = "' + u.state_ + '" ' ;
+        sql += ',lastname = "' + u.lastname_ + '" ' ;
+        sql += ',firstname = "' + u.firstname_ + '" ' ;
+        sql += ',email = "' + u.email_ + '" ' ;
+        sql += ',roles = "' + this.rolesToRolesString(u.roles_) + '" ';
         sql += 'WHERE username="' + u.username_ + '"' ;
+
+        console.log('updateUser: ' + sql);
 
         this.db_.exec(sql, (err) => {
             if (err) {
@@ -134,6 +142,53 @@ export class UserService {
         return data ;
     }
 
+    private changePassword(u: User, password: string) {
+        let hashed : string = this.hashPassword(password) ;
+        if (hashed !== u.password_) {
+            let sql : string = 'UPDATE users SET ' ;
+            sql += 'password = "' + hashed + '" ' ;
+            sql += 'WHERE username="' + u.username_ + '"' ;
+
+            console.log('changePassword: ' + hashed);
+            console.log(sql);
+    
+            this.db_.exec(sql, (err) => {
+                if (err) {
+                    console.log('UserService: failed to update user "' + u.username_ + '" to the database - ' + err) ;
+                    console.log('sql: "' + sql + '"') ;
+                }
+                else {
+                    console.log('UserService: updated username "' + u.username_ + '" in the database');
+                    u.password_ = hashed ;
+                }
+            }) ;            
+        }        
+    }
+
+    private editOneDone(req: Request<{}, any, any, any, Record<string, any>>) : Error | null {
+        let ret: Error | null = null ;
+
+        let u: User | null = this.userFromUserName(req.body.username) ;
+        if (u === null) {
+            ret = new Error('invalid user name "' + req.body.username + '"');
+        }
+        else 
+        {
+            if (req.body.password.length > 0) {
+                this.changePassword(u, req.body.password);
+            }
+
+            u.email_ = req.body.email ;
+            u.firstname_ = req.body.firstname ;
+            u.lastname_ = req.body.lastname
+            u.roles_ = this.roleStringtoRoles(req.body.roles);
+            u.state_ = req.body.state;
+            this.updateUser(u);
+        }
+
+        return ret ;
+    }
+
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         console.log("UserService: rest api '" + req.path + "'");
         let handled: boolean = false ;
@@ -155,7 +210,7 @@ export class UserService {
               let data = new Uint8Array(64);
               let cookieval = this.getRandomValues(data);
               let cookiestr = Buffer.from(cookieval).toString('base64');
-              res.cookie('xeropartdb', cookiestr);
+              res.cookie(UserService.cookieName, cookiestr);
               u.cookie_ = cookiestr;
           
               if (u.isAdmin()) {
@@ -177,6 +232,10 @@ export class UserService {
               }
             }
             handled = true ;
+        }
+        else if (req.path === '/users/logout') {
+            res.clearCookie(UserService.cookieName);
+            res.redirect('/');
         }
         else if (req.path.startsWith(UserService.confirmString)) {
             this.confirmUser(req.path.substring(UserService.confirmString.length + 1));
@@ -222,6 +281,26 @@ export class UserService {
                     }
                     else {
                         res.send(processPage(u, '/admin/edituser.html'));                    
+                    }
+                    handled = true ;
+                }
+                else if (req.path === '/users/changepassword') {
+                    let u: User | null = this.userFromRequest(req);
+                    if (u === null) {
+                        res.status(403).send(createMessageHtml("'" + req.query.username + "' is not a valid user")) ;
+                    }
+                    else {
+                        res.send(processPage(u, '/normal/changepwd.html'));                    
+                    }
+                    handled = true ;
+                }
+                else if (req.path === '/users/editonedone') {
+                    let result: Error | null = this.editOneDone(req);
+                    if (result === null) {
+                        res.redirect('/admin/editusers.html');
+                    }
+                    else {
+                        res.send(createMessageHtml('Edit user failed - ' + result.message));
                     }
                     handled = true ;
                 }
@@ -277,6 +356,8 @@ export class UserService {
             let u: User = this.users_.get(username)!;
 
             let hashed : string = this.hashPassword(password) ;
+            console.log('login: ' + hashed);
+            console.log('stored: ' + u.password_);
             if (hashed !== u.password_) {
                 ret = new Error(UserService.IncorrectPasswordError);
             }
@@ -313,6 +394,22 @@ export class UserService {
         }) ;
     }
 
+    private rolesToRolesString(roles: string[]) : string {
+        let rolestr: string = "" ;
+        for (let role of roles) {
+            if (rolestr.length > 0) {
+                rolestr += "," ;
+            }
+            rolestr += role ;
+        }
+
+        return rolestr ;
+    }
+
+    private roleStringtoRoles(rolesstr: string) : string[] {
+        return rolesstr.split(',');
+    }
+
     public addUser(username: string, password: string, lastname: string, firstname: string, email: string, state: string | null, roles: string[]) : Error | null {
         let ret: Error | null = null ;
 
@@ -320,15 +417,10 @@ export class UserService {
             ret = new Error("duplicate username '" + username + "' requested");
         }
         else {
-            let rolestr: string = "" ;
-            for (let role of roles) {
-                if (rolestr.length > 0) {
-                    rolestr += "," ;
-                }
-                rolestr += role ;
-            }
 
+            let rolestr: string = this.rolesToRolesString(roles);
             password = this.hashPassword(password);
+            console.log('adduser: ' + password);
 
             if (state === null) {
                 state = UserService.stateNew;
@@ -349,7 +441,7 @@ export class UserService {
                     console.log('sql: "' + sql + '"') ;
                 }
                 else {
-                    let u: User = new User(this.nextkey_, username, password, lastname, firstname, email, state!, rolestr);
+                    let u: User = new User(this.nextkey_, username, password, lastname, firstname, email, state!, roles);
                     this.users_.set(username, u) ;
                     this.nextkey_++ ;
                     if (u.state_ == UserService.stateNew) {
@@ -432,7 +524,7 @@ export class UserService {
                 let state = obj[stateKey] as unknown ;
                 let roles = obj[rolesKey] as unknown ;
                 let u: User = new User(id, username as string, password as string, lastname as string, 
-                                        firstname as string, email as string, state as string, roles as string) ;
+                                        firstname as string, email as string, state as string, this.roleStringtoRoles(roles as string)) ;
                 this.users_.set(username as string, u) ;
 
                 if (this.nextkey_ < id + 1) {

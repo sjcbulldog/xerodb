@@ -12,11 +12,12 @@
             <form method="post" action="/users/editonedone" enctype="application/x-www-form-urlencoded">
                 <h1>Edit User</h1>
                 <div>
-                    <p id="username"></p>
+                    <p id="usernametext"></p>
                 </div>
+                <input type="hidden" id="username" name="username" value="**EMPTY**">
                 <div>
                     <label for="password">Password</label>
-                    <input type="password" placeholder="Password" id="password" name="password"/>
+                    <input type="password" placeholder="Password" id="password" name="password" value=""/>
                 </div>
                 <div>
                     <label for="firstname">First Name</label>
