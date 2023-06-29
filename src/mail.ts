@@ -1,5 +1,4 @@
 import * as nodemailer from "nodemailer" ;
-import dotenv from 'dotenv' ;
 
 export async function sendEmail(to: string, subject: string, msg: string) {
 

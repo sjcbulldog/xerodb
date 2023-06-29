@@ -1,18 +1,17 @@
 import express, { Express, Request, Response } from 'express' ;
-import dotenv from 'dotenv' ;
 import { UserService } from './UserService' ;
 import bodyParser from 'body-parser' ;
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import { isLoggedIn, isAdmin } from './auth';
+import { XeroDBConfig } from './config';
 
 const nologinName: string = "/nologin/*" ;
 const adminName: string = "/admin/*" ;
 const normalName: string = "/normal/*" ;
 
-dotenv.config() ;
-
-const usersrv: UserService = new UserService(process.env.DATADIR!);
+const config: XeroDBConfig = XeroDBConfig.getXeroDBConfig();
+const usersrv: UserService = new UserService(config.dataDir());
 const app: Express = express() ;
 
 app.use(express.json());

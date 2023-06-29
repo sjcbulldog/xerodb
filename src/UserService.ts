@@ -7,7 +7,7 @@ import * as crypto from 'crypto' ;
 import { createErrorPage } from './error';
 import { isAdmin, isLoggedIn } from './auth';
 import { sendEmail } from './mail' ;
-import dotenv from 'dotenv' ;
+
 
 interface LooseObject {
     [key: string]: any
