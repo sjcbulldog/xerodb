@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="/nologin/login.css">
+    <script type="text/javascript" src="/nologin/jquery-3.7.0.js"></script>
+    <script type="text/javascript" src="/admin/editusers.js"></script>
+    <style>
+        table, th, td {
+            border: 1px solid black;
+        }
+        th, td {
+            padding: 10px
+        }
+        .app {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+    </style>
+    <title>Edit Users</title>
+</head>
+<body>
+    <script>
+        $(document).ready(showAllUsers);
+    </script>
+    <div class="container">
+        <section id="content">
+            <h2 class="title">Users</h2>
+            <div class = "app">
+                <div class="table"></div>
+            </div>
+            <p></p>
+            <a href="/admin/menu.html">Return to main menu</a>
+            <p></p>
+        </section>
+    </div>
+</body>
+</html>
