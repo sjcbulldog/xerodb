@@ -4,10 +4,10 @@ import { exit } from 'process';
 import sqlite3 from 'sqlite3' ;
 import { User } from './User' ;
 import * as crypto from 'crypto' ;
-import { createMessageHtml } from './error';
+import { createMessageHtml, processPage } from './pagegen';
 import { isAdmin, isLoggedIn } from './auth';
 import { sendEmail } from './mail' ;
-import { EmailConfig, XeroDBConfig } from './config' ;
+import { XeroDBConfig } from './config' ;
 
 const config = XeroDBConfig.getXeroDBConfig();
 
@@ -19,6 +19,7 @@ export class UserService {
     private static readonly userFileName: string = 'user.db' ;
     private static readonly missingErrorMessage: string = 'SQLITE_CANTOPEN' ;
     private static readonly confirmString: string = '/users/confirm' ;
+    private static readonly userInfoString: string = '/users/userinfo' ;
 
     private static readonly stateNew = 'NEW' ;
     private static readonly statePending = 'PENDING' ;
@@ -88,22 +89,15 @@ export class UserService {
         }) ;
     }
 
-    private activate(username: string) : boolean {
-        let u: User | null = this.userFromUserName(username) ;
-        let ret: boolean = false ;
-
-        if (u !== null) {
-            u!.state_ = UserService.stateActive ;
-            this.updateUser(u) ;
-        }
-
-        return ret;
-    }
-
     private getUserInfo(u: User) : Object {
         let obj: LooseObject = {} ;
 
         obj['username'] = u.username_ ;
+        obj['firstname'] = u.firstname_ ;
+        obj['lastname'] = u.lastname_ ;
+        obj['email'] = u.email_ ;
+        obj['roles'] = u.roles_ ;
+        obj['state'] = u.state_ ;
         return obj ;
     }
 
@@ -142,6 +136,7 @@ export class UserService {
 
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         console.log("UserService: rest api '" + req.path + "'");
+        let handled: boolean = false ;
 
         if (req.path === '/users/register') {
             let roles: string[] = [] ;
@@ -152,6 +147,7 @@ export class UserService {
             else {
               res.send(createMessageHtml(ret.message))
             }
+            handled = true ;
         }
         else if (req.path === '/users/login') {
             let u : User | Error = this.canUserLogin(req.body.username, req.body.password);
@@ -180,17 +176,26 @@ export class UserService {
                 res.send(createMessageHtml(msg));
               }
             }
+            handled = true ;
         }
         else if (req.path.startsWith(UserService.confirmString)) {
             this.confirmUser(req.path.substring(UserService.confirmString.length + 1));
-            createMessageHtml('Your account has been confirmed.  It will be available when it is approved by an admin.') ;
+            let msg: string = createMessageHtml('Your account has been confirmed.  It will be available when it is approved by an admin.') ;
+            res.send(msg);
+            handled = true ;
         }
         else {
-            let handled: boolean = true ;
-
             if (isLoggedIn(req, res)) {
-                if (req.path === '/users/userinfo') {
-                    let u: User | null = this.userFromRequest(req);
+                if (req.path.startsWith(UserService.userInfoString)) {
+                    let u: User | null = null ;
+
+                    if (req.query.username !== undefined) {
+                        u = this.userFromUserName(req.query.username) ;
+                    }
+                    else {
+                        u = this.userFromRequest(req);
+                    }
+
                     if (u === null) {
                         res.json({});
                     }
@@ -210,16 +215,22 @@ export class UserService {
                     res.json(this.allUsers());
                     handled = true ;
                 }
-                else if (req.path === '/users/activate') {
-                    this.activate(req.query.username);
-                    res.redirect('/admin/editusers.html') ;
+                else if (req.path === '/users/editone') {
+                    let u: User | null = this.userFromUserName(req.query.username);
+                    if (u === null) {
+                        res.status(403).send(createMessageHtml("'" + req.query.username + "' is not a valid user")) ;
+                    }
+                    else {
+                        res.send(processPage(u, '/admin/edituser.html'));                    
+                    }
                     handled = true ;
                 }
             }
+        }
 
-            if (!handled) {
-                res.status(404).send('unknown users REST API request "' + req.path + "'");
-            }
+        if (!handled) {
+            let msg: string = 'unknown users REST API request "' + req.path + "'" ;
+            res.status(404).send(createMessageHtml(msg));
         }
     }
 

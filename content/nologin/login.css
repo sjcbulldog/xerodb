@@ -122,6 +122,7 @@ form:after {
 #content form { margin: 0 20px; position: relative }
 #content form input[type="text"],
 #content form input[type="email"],
+#content form select,
 #content form input[type="password"] {
 	-webkit-border-radius: 3px;
 	-moz-border-radius: 3px;
@@ -140,7 +141,7 @@ form:after {
 	transition: all 0.5s ease;
 	background: #eae7e7 url(https://cssdeck.com/uploads/media/items/8/8bcLQqF.png) no-repeat;
 	border: 1px solid #c8c8c8;
-	color: #777;
+	color: #000;
 	font: 13px Helvetica, Arial, sans-serif;
 	margin: 0 0 10px;
 	padding: 15px 10px 15px 40px;

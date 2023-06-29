@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="/nologin/login.css">
+    <script type="text/javascript" src="/nologin/jquery-3.7.0.js"></script>
+    <script type="text/javascript" src="/admin/edituser.js"></script>
+    <title>Edit User</title>
+</head>
+<body>
+    <div class="container">
+        <section id="content">
+            <form method="post" action="/users/editonedone" enctype="application/x-www-form-urlencoded">
+                <h1>Edit User</h1>
+                <div>
+                    <p id="username"></p>
+                </div>
+                <div>
+                    <label for="password">Password</label>
+                    <input type="password" placeholder="Password" id="password" name="password"/>
+                </div>
+                <div>
+                    <label for="firstname">First Name</label>
+                    <input type="text" placeholder="First Name" required="true" id="firstname" name="firstname" value="xyzzy"/>
+                </div>
+                <div>
+                    <label for="lastname">Last Name</label>
+                    <input type="text" placeholder="Last Name" required="true" id="lastname" name="lastname"/>
+                </div>
+                <div>
+                    <label for="email">Email</label>
+                    <input type="email" placeholder="Email" required="true" id="email" name="email"/>
+                </div>
+                <div>
+                    <label for="roles">Roles</label>
+                    <input type="text" placeholder="Roles" required="true" id="roles" name="roles"/>
+                </div>
+                <div>
+                    <label for="state">State</label>
+                    <select required="true" id="state" name="state">
+                        <option value="NEW">New</option>
+                        <option value="PENDING">Pending</option>
+                        <option value="ACTIVE">Active</option>
+                        <option value="DISABLED">Disabled</option>
+                    </select>
+                </div>
+                <div>
+                    <input type="submit" value="EditUser" />
+                </div>
+            </form><!-- form -->
+        </section><!-- content -->
+    </div><!-- container -->
+
+    <script> 
+        var usernamevalue="$$$USERNAME$$$";
+    </script>
+</body>
+</html>

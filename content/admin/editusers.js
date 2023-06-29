@@ -12,7 +12,7 @@ function showAllUsers() {
         for(let user of data) {
             content += '<tr>'
             content += '<td>' ;
-            content += '<a title="Edit Users" href=/users/editone?username='+user.username + '">' + user.username + '</td>'
+            content += '<a title="Edit User" href=/users/editone?username='+user.username + '>' + user.username + '</td>'
             content += '<td>' + user.firstname + '</td>' ;
             content += '<td>' + user.lastname + '</td>' ;
 
@@ -28,3 +28,5 @@ function showAllUsers() {
         $('.table').append(content) ;
     }) ;
 }
+
+$(document).ready(showAllUsers);
