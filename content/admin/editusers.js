@@ -21,14 +21,7 @@ function showAllUsers() {
                 str += role + ' ' ;
             }
             content += '<td>' + str + '</td>' ;
-
-            if (user.state === 'PENDING') {
-                content += '<td>' ;
-                content += '<a title="Change To Active" href="/users/activate?username=' + user.username + '">' + user.state + '</td>';
-            }
-            else {
-                content += '<td>' + user.state + '</td>' ;
-            }
+            content += '<td>' + user.state + '</td>' ;
             content += '</tr>'
         }
         content += '</table>';

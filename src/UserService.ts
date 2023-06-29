@@ -4,10 +4,12 @@ import { exit } from 'process';
 import sqlite3 from 'sqlite3' ;
 import { User } from './User' ;
 import * as crypto from 'crypto' ;
-import { createErrorPage } from './error';
+import { createMessageHtml } from './error';
 import { isAdmin, isLoggedIn } from './auth';
 import { sendEmail } from './mail' ;
+import { EmailConfig, XeroDBConfig } from './config' ;
 
+const config = XeroDBConfig.getXeroDBConfig();
 
 interface LooseObject {
     [key: string]: any
@@ -107,10 +109,7 @@ export class UserService {
 
     private confirmUser(token: string) {
         console.log('Confirming user token: ' + token);
-        let sql = 
-            `
-            select token, username from confirm;
-            `;
+        let sql = 'select token, username from confirm where token="' + token + '";' ;
         this.db_.all(sql, (err, rows) => {
             rows.forEach(row => {
                 let obj: Object = row as Object ;
@@ -133,6 +132,14 @@ export class UserService {
         });
     }
 
+    private getRandomValues(data: Uint8Array) : Uint8Array{
+        for(let i = 0 ; i < data.length ; i++) {
+            data[i] = Math.floor(Math.random() * 256);
+        }
+
+        return data ;
+    }
+
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         console.log("UserService: rest api '" + req.path + "'");
 
@@ -143,14 +150,14 @@ export class UserService {
               res.redirect('/nologin/confirm.html');
             }
             else {
-              res.send(createErrorPage(ret.message))
+              res.send(createMessageHtml(ret.message))
             }
         }
         else if (req.path === '/users/login') {
             let u : User | Error = this.canUserLogin(req.body.username, req.body.password);
             if (u instanceof User) {
               let data = new Uint8Array(64);
-              let cookieval = crypto.getRandomValues(data);
+              let cookieval = this.getRandomValues(data);
               let cookiestr = Buffer.from(cookieval).toString('base64');
               res.cookie('xeropartdb', cookiestr);
               u.cookie_ = cookiestr;
@@ -166,16 +173,17 @@ export class UserService {
               let err: Error = u as Error ;
               if (err.message == UserService.UserNotActiveError) {
                 let msg: string = 'the user "' + req.body.username + '" is not active - see a mentor for more details' ;
-                res.send(createErrorPage(msg));
+                res.send(createMessageHtml(msg));
               }
               else {
                 let msg: string = 'the user or password given are not valid' ;
-                res.send(createErrorPage(msg));
+                res.send(createMessageHtml(msg));
               }
             }
         }
         else if (req.path.startsWith(UserService.confirmString)) {
             this.confirmUser(req.path.substring(UserService.confirmString.length + 1));
+            createMessageHtml('Your account has been confirmed.  It will be available when it is approved by an admin.') ;
         }
         else {
             let handled: boolean = true ;
@@ -288,7 +296,7 @@ export class UserService {
                 console.log('sql: "' + sql + '"') ;
             }
             else {
-                msg += 'Please click <a href="' + process.env.URLNAME! + '/users/confirm/' + cookie + '"> here</a> to confirm the user "' + u.username_ + "'";
+                msg += 'Please click <a href="' + config.url() + '/users/confirm/' + cookie + '"> here</a> to confirm the user "' + u.username_ + "'";
                 sendEmail(u.email_, 'Confirm XeroPartsDB Account', msg);
             }
         }) ;

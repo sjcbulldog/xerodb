@@ -1,16 +1,20 @@
 import * as nodemailer from "nodemailer" ;
+import { EmailConfig, XeroDBConfig } from './config' ;
+
+const config = XeroDBConfig.getXeroDBConfig();
 
 export async function sendEmail(to: string, subject: string, msg: string) {
+    const e: EmailConfig = config.email();
 
     const transport = nodemailer.createTransport(
         {
-            host: process.env.EMAILHOST!,
-            port: +process.env.EMAILPORT!,
+            host: e.host,
+            port: e.port,
             secure: false,
             requireTLS: true,
             auth: {
-                user: process.env.EMAILUSER!,
-                pass: process.env.EMAILPASSWD!
+                user: e.user,
+                pass: e.password
             },
             logger: true
         }

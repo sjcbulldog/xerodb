@@ -21,7 +21,7 @@ app.use(cookieParser());
 
 app.get(nologinName, (req, res, next) => {
   let urlpath: string = req.url.substring(nologinName.length - 1);
-  let filepath: string = path.join(process.env.CONTENTDIR!, 'nologin', urlpath);
+  let filepath: string = path.join(config.contentDir(), 'nologin', urlpath);
   let b: string = path.basename(filepath) ;
   res.contentType(b) ;
   res.sendFile(filepath);
@@ -33,7 +33,7 @@ app.get(adminName, (req, res) => {
     return ;
 
   let urlpath: string = req.url.substring(adminName.length - 1);
-  let filepath: string = path.join(process.env.CONTENTDIR!, 'admin', urlpath);
+  let filepath: string = path.join(config.contentDir(), 'admin', urlpath);
   res.contentType(path.basename(filepath));
   res.sendFile(filepath);
 }) ;
@@ -43,7 +43,7 @@ app.get(normalName, (req, res, next) => {
     return false ;
 
   let urlpath: string = req.url.substring(normalName.length - 1);
-  let filepath: string = path.join(process.env.CONTENTDIR!, 'normal', urlpath);
+  let filepath: string = path.join(config.contentDir(), 'normal', urlpath);
   res.contentType(path.basename(filepath));
   res.sendFile(filepath);
 }) ;
@@ -56,7 +56,6 @@ app.all('/users/*', (req, res) => {
   usersrv.get(req, res) ;
 });
 
-let port: number = +process.env.PORT! ;
-app.listen(port, '0.0.0.0', 16, () => {
-  console.log(`[server]: Server is running at http://localhost:${port}`);
+app.listen(config.port(), '0.0.0.0', 16, () => {
+  console.log(`[server]: Server is running at http://localhost:${config.port()}`);
 });

@@ -73,14 +73,19 @@ export class XeroDBConfig
             }
 
         } else {
-            this.datadir_ = path.join(__dirname, 'data') ;
-            this.contentdir_ = path.join(__dirname, 'content') ;
+            this.datadir_ = path.join(__dirname, '..', 'data') ;
+            this.contentdir_ = path.join(__dirname, '..','content') ;
             this.port_ = 8000 ;
             this.url_ = 'http://127.0.0.1:' + this.port_ ;
         }
 
+
+
         if (!fs.existsSync(this.datadir_)) {
-            throw new Error('cannot create data directory "' + this.datadir_ + '" for application');
+            fs.mkdirSync(this.datadir_)
+            if (!fs.existsSync(this.datadir_)) {
+                throw new Error('cannot create data directory "' + this.datadir_ + '" for application');
+            }
         }        
 
         if (!fs.existsSync(this.contentdir_)) {
@@ -114,7 +119,10 @@ export class XeroDBConfig
         }
 
         if (process.env.EMAILPORT !== undefined) {
-            port = +process.env.EMAILPORT!
+            port = parseInt(process.env.EMAILPORT);
+            if (isNaN(this.port_) || this.port_ <= 0 || this.port_ > 65535) {
+                throw new Error('the ".env" value EMAILPORT is not valid - must be an integer greater than 0 and less than 65535') ;
+            }
         }
         else {
             throw new Error('the ".env" value EMAILPORT is not defined');
