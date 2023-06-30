@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import { isLoggedIn, isAdmin } from './auth';
 import { XeroDBConfig } from './config';
+import { User } from './User';
 
 const nologinName: string = "/nologin/*" ;
 const adminName: string = "/admin/*" ;
@@ -54,6 +55,19 @@ app.all('/', (req, res) => {
 
 app.all('/users/*', (req, res) => {
   usersrv.get(req, res) ;
+});
+
+app.all('/menu', (req, res) => {
+  let u : User | null = usersrv.userFromRequest(req);
+  if (u === null) {
+    res.redirect('/');
+  }
+  else if (u.isAdmin()) {
+    res.redirect('/admin/menu.html') ;
+  }
+  else {
+    res.redirect('/normal/menu.html') ;
+  }
 });
 
 app.listen(config.port(), '0.0.0.0', 16, () => {

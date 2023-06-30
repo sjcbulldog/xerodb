@@ -214,10 +214,10 @@ export class UserService {
               u.cookie_ = cookiestr;
           
               if (u.isAdmin()) {
-                res.redirect('/admin/menu.html')
+                res.redirect('/menu')
               }
               else {
-                res.redirect('/normal/menu.html');
+                res.redirect('/menu');
               }
             }
             else {
@@ -236,6 +236,7 @@ export class UserService {
         else if (req.path === '/users/logout') {
             res.clearCookie(UserService.cookieName);
             res.redirect('/');
+            handled = true ;
         }
         else if (req.path.startsWith(UserService.confirmString)) {
             this.confirmUser(req.path.substring(UserService.confirmString.length + 1));
@@ -264,7 +265,23 @@ export class UserService {
                     handled = true ;
                 }
                 else if (req.path === '/users/changepwd') {
-                    console.log("changing password");
+                    let u : User | null = this.userFromRequest(req);
+                    if (u === null) {
+                        res.status(403).send(createMessageHtml("invalid user - did you time out"));
+                    }
+                    else {
+                        let hashed : string = this.hashPassword(req.body.oldpwd) ;
+                        if (hashed !== u.password_) {
+                            res.status(400).send(createMessageHtml("the old password was not valid")) ;
+                        }
+                        else if (req.body.newpwd !== req.body.secondpwd) {
+                            res.status(400).send(createMessageHtml("the new passwords did not match")) ;
+                        }
+                        else {
+                            this.changePassword(u, req.body.newpwd);
+                            res.redirect("/menu");
+                        }
+                    }
                     handled = true ;
                 }
             }
@@ -356,8 +373,6 @@ export class UserService {
             let u: User = this.users_.get(username)!;
 
             let hashed : string = this.hashPassword(password) ;
-            console.log('login: ' + hashed);
-            console.log('stored: ' + u.password_);
             if (hashed !== u.password_) {
                 ret = new Error(UserService.IncorrectPasswordError);
             }
