@@ -49,7 +49,7 @@ export class XeroDBConfig
             }
 
             if (process.env.CONTENTDIR !== undefined) {
-                this.contentdir_ = process.env.DATADIR! ;
+                this.contentdir_ = process.env.CONTENTDIR! ;
             }
             else {
                 this.contentdir_ = path.join(__dirname, 'content') ;                
