@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script type="text/javascript" src="/nologin/jquery-3.7.0.js"></script>
+    <link rel="stylesheet" href="/nologin/login.css">
+</head>
+<body>
+<div class="container">
+    <section id="content">
+        <h2 class="title">Reset Your Password</h2>
+            <form id="changepwd" method="post" action="/users/lostpwd2" enctype="application/x-www-form-urlencoded">
+                <div>
+                    <input type="hidden" id="token" name="token" value="$$$TOKEN$$$"/>
+                </div>
+                <p><b>UserName: $$$USERNAME$$$</b></p>
+                <div>
+                    <input type="password" placeholder="New Password" required="true" id="newpwd" name="newpwd"/>
+                </div>
+                <div>
+                    <input type="password" placeholder="Repeate New Password" required="true" id="secondpwd" name="secondpwd"/><br>
+                    <p id='passworderror'>The two passwords are not the same</p>
+                </div>
+
+        
+                <div>
+                    <input type="submit" value="Change" />
+                </div>
+            </form>
+        </div>
+    </section>
+</div>
+<script type="text/javascript" src="/nologin/lostpwd2.js"></script>
+</body>
+</html>

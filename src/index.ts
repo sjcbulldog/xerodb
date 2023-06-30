@@ -6,6 +6,7 @@ import path from 'path';
 import { isLoggedIn, isAdmin } from './auth';
 import { XeroDBConfig } from './config';
 import { User } from './User';
+import { createMessageHtml } from './pagegen';
 
 const nologinName: string = "/nologin/*" ;
 const adminName: string = "/admin/*" ;
@@ -30,13 +31,15 @@ app.get(nologinName, (req, res, next) => {
 
 app.get(adminName, (req, res) => {
 
-  if (!isAdmin(usersrv, req, res))
-    return ;
-
-  let urlpath: string = req.url.substring(adminName.length - 1);
-  let filepath: string = path.join(config.contentDir(), 'admin', urlpath);
-  res.contentType(path.basename(filepath));
-  res.sendFile(filepath);
+  if (!isAdmin(usersrv, req, res)) {
+    res.send(createMessageHtml('Permission Denied', 'You do not have permission for the requested resource'));
+  }
+  else {
+    let urlpath: string = req.url.substring(adminName.length - 1);
+    let filepath: string = path.join(config.contentDir(), 'admin', urlpath);
+    res.contentType(path.basename(filepath));
+    res.sendFile(filepath);
+  }
 }) ;
 
 app.get(normalName, (req, res, next) => {

@@ -148,28 +148,93 @@ export class UserService {
         });
     }
 
-    private lostPasswordStage2(token: string) {
-        console.log('Confirming lost password token: ' + token);
+    private lostPasswordStage2(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        let token = req.path.substring(UserService.lostPwdReturnString.length + 1)
         let sql = 'select token, username from lostpwd where token="' + token + '";' ;
         this.db_.all(sql, (err, rows) => {
-            rows.forEach(row => {
-                let obj: Object = row as Object ;
-                type ObjectKey = keyof typeof obj ;
-                const tokenKey= 'token' as ObjectKey ;
-                const usernameKey = 'username' as ObjectKey ;
-
-                let token = (obj[tokenKey] as unknown) as string ;
-                let username = (obj[usernameKey] as unknown) as string ;
-
-                let u: User | null = this.userFromUserName(username);
-                if (u != null) {
-                    console.log('Lost Password Stage 2')
-                }
-
-                sql = 'delete from confirm where token="' + token + '";' ;
+            if (rows.length !== 1) {
+                sql = 'delete from lostpwd where token="' + token + '";' ;
                 this.db_.exec(sql);
-            });
+                res.send(createMessageHtml('Internal Error', 'internal error with lost password request'));
+            }
+            else {
+                rows.forEach(row => {
+                    let obj: Object = row as Object ;
+                    type ObjectKey = keyof typeof obj ;
+                    const tokenKey= 'token' as ObjectKey ;
+                    const usernameKey = 'username' as ObjectKey ;
+
+                    let token = (obj[tokenKey] as unknown) as string ;
+                    let username = (obj[usernameKey] as unknown) as string ;
+
+                    let u: User | null = this.userFromUserName(username);
+                    if (u != null) {
+                        let vars: Map<string, string> = new Map<string, string>() ;
+                        vars.set('$$$TOKEN$$$', token);
+                        vars.set('$$$USERNAME$$$', u.username_);
+                        res.send(processPage(vars, '/nologin/lostpwd2.html'));
+                    }
+                    else {
+                        res.send(createMessageHtml('Error', 'invalid lost password request'));
+                    }
+                });
+            }
         });
+    }
+
+    private processNewPassword(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        let sql = 'select token, username from lostpwd where token="' + req.body.token + '";' ;
+        this.db_.all(sql, (err, rows) => {
+            if (rows.length !== 1) {
+                sql = 'delete from lostpwd where token="' + req.body.token + '";' ;
+                this.db_.exec(sql);
+                res.send(createMessageHtml('Internal Error', 'internal error with lost password request'));
+            }
+            else {
+                rows.forEach(row => {
+                    let obj: Object = row as Object ;
+                    type ObjectKey = keyof typeof obj ;
+                    const tokenKey= 'token' as ObjectKey ;
+                    const usernameKey = 'username' as ObjectKey ;
+
+                    let token = (obj[tokenKey] as unknown) as string ;
+                    let username = (obj[usernameKey] as unknown) as string ;
+
+                    let u: User | null = this.userFromUserName(username);
+                    if (u != null) {
+                        let hashed : string = this.hashPassword(req.body.newpwd) ;
+                        if (hashed !== u.password_) {
+                            let sql : string = 'UPDATE users SET ' ;
+                            sql += 'password = "' + hashed + '" ' ;
+                            sql += 'WHERE username="' + u.username_ + '"' ;
+
+                            this.db_.exec(sql, (err) => {
+                                if (err) {
+                                    console.log('UserService: failed to update user "' + u!.username_ + '" to the database - ' + err) ;
+                                    console.log('sql: "' + sql + '"') ;
+
+                                    res.send(createMessageHtml('Password Reset Failed', err.message)) ;
+                                }
+                                else {
+                                    console.log('UserService: updated username "' + u!.username_ + '" in the database');
+                                    u!.password_ = hashed ;
+                                }
+                            }) ;    
+
+                            res.send(createMessageHtml('Password Reset', 'You password has been reset')) ;
+                        }
+                        else {
+                            res.send(createMessageHtml('Reset Password Failed', 'Your password is identical to your existing password.')) ;
+                        }
+                    }
+                    else {
+                        res.send(createMessageHtml('Error', 'invalid lost password request'));
+                    }
+                });
+            }
+        });
+
+
     }
 
     private getRandomValues(data: Uint8Array) : Uint8Array{
@@ -187,9 +252,6 @@ export class UserService {
             sql += 'password = "' + hashed + '" ' ;
             sql += 'WHERE username="' + u.username_ + '"' ;
 
-            console.log('changePassword: ' + hashed);
-            console.log(sql);
-    
             this.db_.exec(sql, (err) => {
                 if (err) {
                     console.log('UserService: failed to update user "' + u.username_ + '" to the database - ' + err) ;
@@ -229,20 +291,17 @@ export class UserService {
 
     private lostPassword(req: Request<{}, any, any, any, Record<string, any>>) {
         let email: string = req.body.email ;
+        let u: User | null = null ;
 
         if (email === undefined || email.length === 0) {
-            let u: User | null = this.userFromUserName(req.body.username);
-            if (u !== null) {
-                email = u.email_ ;
-            }
+            u = this.userFromUserName(req.body.username);
+        }
+        else {
+            u = this.userFromEmail(email);
         }
 
-        if (email !== undefined && email.length > 0) {
-            let u: User | null = this.userFromEmail(email);
-            if (u !== null) {
-                console.log('Lost Password: ' + email);
-                this.sendLostPasswordEmail(u);
-            }
+        if (u != null) {
+            this.sendLostPasswordEmail(u);
         }
     }
 
@@ -252,11 +311,16 @@ export class UserService {
 
         if (req.path === '/users/lostpwd') {
             this.lostPassword(req);
-            res.send(createMessageHtml('If the username or email were valid, look for email instructions.  If they do not arrive, check your SPAM or JUNK folder'));
+            res.send(createMessageHtml('Lost Password', 'If the username or email were valid, look for email instructions.  If they do not arrive, check your SPAM or JUNK folder'));
+            handled = true ;
+        }
+        else if (req.path === '/users/lostpwd2') {
+            this.processNewPassword(req, res);
             handled = true ;
         }
         else if (req.path.startsWith(UserService.lostPwdReturnString)) {
-            this.lostPasswordStage2(req.path.substring(UserService.lostPwdReturnString.length + 1));
+            this.lostPasswordStage2(req, res);
+            handled = true ;
         }
         else if (req.path === '/users/register') {
             let roles: string[] = [] ;
@@ -265,7 +329,7 @@ export class UserService {
               res.redirect('/nologin/confirm.html');
             }
             else {
-              res.send(createMessageHtml(ret.message))
+              res.send(createMessageHtml('Error', ret.message))
             }
             handled = true ;
         }
@@ -289,11 +353,11 @@ export class UserService {
               let err: Error = u as Error ;
               if (err.message == UserService.UserNotActiveError) {
                 let msg: string = 'the user "' + req.body.username + '" is not active - see a mentor for more details' ;
-                res.send(createMessageHtml(msg));
+                res.send(createMessageHtml('Account Disabled', msg));
               }
               else {
                 let msg: string = 'the user or password given are not valid' ;
-                res.send(createMessageHtml(msg));
+                res.send(createMessageHtml('Invalid Login', msg));
               }
             }
             handled = true ;
@@ -305,7 +369,7 @@ export class UserService {
         }
         else if (req.path.startsWith(UserService.confirmString)) {
             this.confirmUser(req.path.substring(UserService.confirmString.length + 1));
-            let msg: string = createMessageHtml('Your account has been confirmed.  It will be available when it is approved by an admin.') ;
+            let msg: string = createMessageHtml('Confirmation Sucessful', 'Your account has been confirmed.  It will be available when it is approved by an admin.') ;
             res.send(msg);
             handled = true ;
         }
@@ -332,20 +396,33 @@ export class UserService {
                 else if (req.path === '/users/changepwd') {
                     let u : User | null = this.userFromRequest(req);
                     if (u === null) {
-                        res.status(403).send(createMessageHtml("invalid user - did you time out"));
+                        res.status(403).send(createMessageHtml('Error', "invalid user - did you time out"));
                     }
                     else {
                         let hashed : string = this.hashPassword(req.body.oldpwd) ;
                         if (hashed !== u.password_) {
-                            res.status(400).send(createMessageHtml("the old password was not valid")) ;
+                            res.status(400).send(createMessageHtml('Error', "the old password was not valid")) ;
                         }
                         else if (req.body.newpwd !== req.body.secondpwd) {
-                            res.status(400).send(createMessageHtml("the new passwords did not match")) ;
+                            res.status(400).send(createMessageHtml('Error', "the new passwords did not match")) ;
                         }
                         else {
                             this.changePassword(u, req.body.newpwd);
                             res.redirect("/menu");
                         }
+                    }
+                    handled = true ;
+                }
+                else if (req.path === '/users/changepassword') {
+                    let u: User | null = this.userFromRequest(req);
+                    if (u === null) {
+                        res.status(403).send(createMessageHtml('Invalid User', "'" + req.query.username + "' is not a valid user")) ;
+                    }
+                    else {
+                        let vars: Map<string, string> = new Map<string, string>();
+                        vars.set('$$$USERNAME$$$', u.username_);
+                        vars.set('$$$USERMAIL$$$', u.email_);
+                        res.send(processPage(vars, '/normal/changepwd.html'));                    
                     }
                     handled = true ;
                 }
@@ -359,30 +436,24 @@ export class UserService {
                 else if (req.path === '/users/editone') {
                     let u: User | null = this.userFromUserName(req.query.username);
                     if (u === null) {
-                        res.status(403).send(createMessageHtml("'" + req.query.username + "' is not a valid user")) ;
+                        res.status(403).send(createMessageHtml('Invalid User', "'" + req.query.username + "' is not a valid user")) ;
                     }
                     else {
-                        res.send(processPage(u, '/admin/edituser.html'));                    
+                        let vars: Map<string, string> = new Map<string, string>();
+                        vars.set('$$$USERNAME$$$', u.username_);
+                        vars.set('$$$USERMAIL$$$', u.email_);
+                        res.send(processPage(vars, '/admin/edituser.html'));                    
                     }
                     handled = true ;
                 }
-                else if (req.path === '/users/changepassword') {
-                    let u: User | null = this.userFromRequest(req);
-                    if (u === null) {
-                        res.status(403).send(createMessageHtml("'" + req.query.username + "' is not a valid user")) ;
-                    }
-                    else {
-                        res.send(processPage(u, '/normal/changepwd.html'));                    
-                    }
-                    handled = true ;
-                }
+
                 else if (req.path === '/users/editonedone') {
                     let result: Error | null = this.editOneDone(req);
                     if (result === null) {
                         res.redirect('/admin/editusers.html');
                     }
                     else {
-                        res.send(createMessageHtml('Edit user failed - ' + result.message));
+                        res.send(createMessageHtml('Error', 'Edit user failed - ' + result.message));
                     }
                     handled = true ;
                 }
@@ -391,7 +462,7 @@ export class UserService {
 
         if (!handled) {
             let msg: string = 'unknown users REST API request "' + req.path + "'" ;
-            res.status(404).send(createMessageHtml(msg));
+            res.status(404).send(createMessageHtml('Unknown Request', msg));
         }
     }
 
@@ -465,11 +536,23 @@ export class UserService {
     }
 
     private sendLostPasswordEmail(u: User) {
-        let cookie : string = crypto.createHash('sha256').update(u.username_).digest('hex');
+        let token : string = crypto.createHash('sha256').update(u.username_).digest('hex');
         let msg: string = "" ;
 
-        let sql = 'INSERT into lostpwd VALUES (' ;
-        sql += '"' + cookie + '",' ;
+        //
+        // Delete any old lost password records for this user or token
+        //
+        let sql: string = 'delete from lostpwd where username="' + u.username_ + '";' ;
+        this.db_.exec(sql);
+
+        sql = 'delete from lostpwd where token="' + token + '";' ;
+        this.db_.exec(sql);
+
+        //
+        // Create one new record for this user
+        //
+        sql = 'INSERT into lostpwd VALUES (' ;
+        sql += '"' + token + '",' ;
         sql += '"' + u.username_ + '");' ;
 
         this.db_.exec(sql, (err) => {
@@ -478,7 +561,7 @@ export class UserService {
                 console.log('sql: "' + sql + '"') ;
             }
             else {
-                msg += 'Please click <a href="' + config.url() + '/users/lostpwdreturn/' + cookie + '"> here</a> to reset your password "' + u.username_ + "'";
+                msg += 'Please click <a href="' + config.url() + '/users/lostpwdreturn/' + token + '"> here</a> to reset your password "' + u.username_ + "'";
                 sendEmail(u.email_, 'Lost XeroPartsDB Account Password', msg);
             }
         }) ;
@@ -526,8 +609,10 @@ export class UserService {
         if (this.users_.has(username)) {
             ret = new Error("duplicate username '" + username + "' requested");
         }
+        else if (this.userFromEmail(email) !== null) {
+            ret = new Error("an account with the email '" + email + "' already exists");
+        }
         else {
-
             let rolestr: string = this.rolesToRolesString(roles);
             password = this.hashPassword(password);
 

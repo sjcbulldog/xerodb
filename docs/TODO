@@ -1,0 +1,12 @@
+General
+- common database
+
+Users
+- varied roles (useradmin, robotadmin, inventoryadmin)
+
+Robots
+- Robot service
+- New Robot
+
+Inventory
+- Inventory service

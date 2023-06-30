@@ -1,15 +1,14 @@
 import path from "path";
-import { User } from "./User";
 import { XeroDBConfig } from './config' ;
 import * as fs from 'fs' ;
 
 let config: XeroDBConfig = XeroDBConfig.getXeroDBConfig();
 
-export function createMessageHtml(msg: string) : string {
+export function createMessageHtml(title: string, msg: string) : string {
   let ret: string = 
     ` <!DOCTYPE html>
       <head>
-        <title>Error</title>
+        <title>$$$TITLE$$$</title>
         <link rel="stylesheet" href="/nologin/message.css">
       </head>
       <body>
@@ -23,16 +22,22 @@ export function createMessageHtml(msg: string) : string {
         </div>
       </body>
   `
+  ret = ret.replace('$$$TITLE$$$', title);
   ret = ret.replace('$$$MESSAGE$$$', msg);
   return ret;
 }
 
-export function processPage(u: User, page: string) : string {
+export function processPage(vars: Map<string, string> | null, page: string) : string {
   let ret: string ;
 
   page = path.join(config.contentDir(), page);
   ret = fs.readFileSync(page).toString('utf-8');
-  ret = ret.replace('$$$USERNAME$$$',u.username_);
-  ret = ret.replace('$$$USEREMAIL$$$', u.email_);
+
+  if (vars !== null) {
+    for(let [key, text] of vars) {
+      ret = ret.replace(key, text);
+    }
+  }
+
   return ret ;
 }
