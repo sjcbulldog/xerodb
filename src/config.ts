@@ -2,8 +2,6 @@ import dotenv from 'dotenv' ;
 import path from 'path';
 import fs from 'fs' ;
 
-
-
 export class EmailConfig
 {
     public user: string ;
@@ -25,6 +23,7 @@ export class XeroDBConfig
 
     private datadir_ : string ;
     private contentdir_ : string ;
+    private securitydir_ : string ;
     private url_ : string ;
     private port_ : number ;
     private email_ : EmailConfig ;
@@ -75,10 +74,18 @@ export class XeroDBConfig
                 }
             }
 
+            if (process.env.SECURITYDIR !== undefined) {
+                this.securitydir_ = process.env.SECURITYDIR;
+            }
+            else {
+                this.securitydir_ = path.join(__dirname, 'security') ;
+            }
+
         } else if (process.env.PRODUCTION === 'false') {
             this.production_ = false ;
             this.datadir_ = path.join(__dirname, '..', 'data') ;
             this.contentdir_ = path.join(__dirname, '..','content') ;
+            this.securitydir_ = path.join(__dirname, 'security') ;
             this.port_ = 8000 ;
             this.url_ = 'http://127.0.0.1:' + this.port_ ;
         }
@@ -142,6 +149,10 @@ export class XeroDBConfig
 
     public contentDir() : string {
         return this.contentdir_ ;
+    }
+
+    public securityDir() : string {
+        return this.securitydir_ ;
     }
 
     public url() : string {

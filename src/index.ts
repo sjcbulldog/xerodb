@@ -8,6 +8,7 @@ import { XeroDBConfig } from './config';
 import { User } from './User';
 import { createMessageHtml } from './pagegen';
 import https from 'https' ;
+import fs from 'fs' ;
 
 const nologinName: string = "/nologin/*" ;
 const adminName: string = "/admin/*" ;
@@ -75,7 +76,11 @@ app.all('/menu', (req, res) => {
 });
 
 if (config.production()) {
-  https.createServer(app).listen(config.port(), '0.0.0.0', 16, () => {
+  var privateKey  = fs.readFileSync(path.join(config.securityDir(), 'server.key'), 'utf8');
+  var certificate = fs.readFileSync(path.join(config.securityDir(), 'server.crt'), 'utf8');
+  var credentials = {key: privateKey, cert: certificate};
+
+  https.createServer(credentials, app).listen(config.port(), '0.0.0.0', 16, () => {
     console.log(`xerodb: production server is running at "${config.url()}" on port ${config.port()}`);
   }) ;
 }
