@@ -1,4 +1,10 @@
 $(document).ready(() => {
-    $(document).on('submit', this, (e) => {
-    }) ;
-});
+    $('#passworderror').hide() ;
+}) ;
+
+$('#changepwd').submit(function (e) {
+    if ($("#newpwd").val() !== $("#secondpwd").val()) {
+        $('#passworderror').show();
+        e.preventDefault();
+    }
+}) ;

@@ -20,6 +20,7 @@ export class UserService {
     private static readonly missingErrorMessage: string = 'SQLITE_CANTOPEN' ;
     private static readonly confirmString: string = '/users/confirm' ;
     private static readonly userInfoString: string = '/users/userinfo' ;
+    private static readonly lostPwdReturnString: string = '/users/lostpwdreturn';
 
     private static readonly cookieName: string = 'xeropartdb';
 
@@ -75,6 +76,15 @@ export class UserService {
         return ret;
     }
 
+    private emailAddAdmins(u: User) {
+        for(let [key, user] of this.users_) {
+            if (user.isAdmin()) {
+                let msg: string = 'The user ' + u.username_ + ' has confirmed their account and is now pending.' ;
+                sendEmail(user.email_, 'XeroDB: New User ' + u.username_ + ' pending', msg);
+            }
+        }
+    }
+
     private updateUser(u: User) {
         let sql : string = 'UPDATE users SET ' ;
         sql += 'state = "' + u.state_ + '" ' ;
@@ -93,6 +103,10 @@ export class UserService {
             }
             else {
                 console.log('UserService: updated username "' + u.username_ + '" in the database');
+
+                if (u.state_ == UserService.statePending) {
+                    this.emailAddAdmins(u);
+                }
             }
         }) ;
     }
@@ -126,6 +140,30 @@ export class UserService {
                 if (u != null) {
                     u.state_ = UserService.statePending ;
                     this.updateUser(u);
+                }
+
+                sql = 'delete from confirm where token="' + token + '";' ;
+                this.db_.exec(sql);
+            });
+        });
+    }
+
+    private lostPasswordStage2(token: string) {
+        console.log('Confirming lost password token: ' + token);
+        let sql = 'select token, username from lostpwd where token="' + token + '";' ;
+        this.db_.all(sql, (err, rows) => {
+            rows.forEach(row => {
+                let obj: Object = row as Object ;
+                type ObjectKey = keyof typeof obj ;
+                const tokenKey= 'token' as ObjectKey ;
+                const usernameKey = 'username' as ObjectKey ;
+
+                let token = (obj[tokenKey] as unknown) as string ;
+                let username = (obj[usernameKey] as unknown) as string ;
+
+                let u: User | null = this.userFromUserName(username);
+                if (u != null) {
+                    console.log('Lost Password Stage 2')
                 }
 
                 sql = 'delete from confirm where token="' + token + '";' ;
@@ -189,11 +227,38 @@ export class UserService {
         return ret ;
     }
 
+    private lostPassword(req: Request<{}, any, any, any, Record<string, any>>) {
+        let email: string = req.body.email ;
+
+        if (email === undefined || email.length === 0) {
+            let u: User | null = this.userFromUserName(req.body.username);
+            if (u !== null) {
+                email = u.email_ ;
+            }
+        }
+
+        if (email !== undefined && email.length > 0) {
+            let u: User | null = this.userFromEmail(email);
+            if (u !== null) {
+                console.log('Lost Password: ' + email);
+                this.sendLostPasswordEmail(u);
+            }
+        }
+    }
+
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         console.log("UserService: rest api '" + req.path + "'");
         let handled: boolean = false ;
 
-        if (req.path === '/users/register') {
+        if (req.path === '/users/lostpwd') {
+            this.lostPassword(req);
+            res.send(createMessageHtml('If the username or email were valid, look for email instructions.  If they do not arrive, check your SPAM or JUNK folder'));
+            handled = true ;
+        }
+        else if (req.path.startsWith(UserService.lostPwdReturnString)) {
+            this.lostPasswordStage2(req.path.substring(UserService.lostPwdReturnString.length + 1));
+        }
+        else if (req.path === '/users/register') {
             let roles: string[] = [] ;
             let ret = this.addUser(req.body.username, req.body.password, req.body.lastname, req.body.firstname, req.body.email, null, roles) ;
             if (ret == null) {
@@ -362,6 +427,16 @@ export class UserService {
 
         return null;
     }    
+    
+    public userFromEmail(email: string) : User | null {
+        for(let [key, user] of this.users_) {
+            if (user.email_ === email) {
+                return user ;
+            }
+        }
+
+        return null;
+    }   
 
     public canUserLogin(username: string, password: string) : Error | User {
         let ret : Error | User = new Error(UserService.UnknownUserError) ;
@@ -387,6 +462,26 @@ export class UserService {
         }
 
         return ret ;
+    }
+
+    private sendLostPasswordEmail(u: User) {
+        let cookie : string = crypto.createHash('sha256').update(u.username_).digest('hex');
+        let msg: string = "" ;
+
+        let sql = 'INSERT into lostpwd VALUES (' ;
+        sql += '"' + cookie + '",' ;
+        sql += '"' + u.username_ + '");' ;
+
+        this.db_.exec(sql, (err) => {
+            if (err) {
+                console.log('UserService: failed to add user "' + u.username_ + '" to the lost password database - ' + err) ;
+                console.log('sql: "' + sql + '"') ;
+            }
+            else {
+                msg += 'Please click <a href="' + config.url() + '/users/lostpwdreturn/' + cookie + '"> here</a> to reset your password "' + u.username_ + "'";
+                sendEmail(u.email_, 'Lost XeroPartsDB Account Password', msg);
+            }
+        }) ;
     }
 
     private sendConfirmationEmail(u: User) {
@@ -435,7 +530,6 @@ export class UserService {
 
             let rolestr: string = this.rolesToRolesString(roles);
             password = this.hashPassword(password);
-            console.log('adduser: ' + password);
 
             if (state === null) {
                 state = UserService.stateNew;
@@ -508,8 +602,14 @@ export class UserService {
             token text not null,
             username text not null);
           ` ;
-
         this.db_.exec(sql)          
+
+        sql = 
+        `CREATE TABLE lostpwd (
+          token text not null,
+          username text not null);
+        ` ;
+      this.db_.exec(sql)   
     }
 
     private loadUsers() {

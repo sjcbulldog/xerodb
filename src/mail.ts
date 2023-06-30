@@ -20,14 +20,19 @@ export async function sendEmail(to: string, subject: string, msg: string) {
         }
     ) ;
 
-    const info = await transport.sendMail(
-        {
-            from: '"XeroPartDb" <butchg@comcast.net>',
-            to: to,
-            subject: subject,
-            html: msg
-        }
-    );
+    try {
+        const info = await transport.sendMail(
+            {
+                from: '"XeroPartDb" <butchg@comcast.net>',
+                to: to,
+                subject: subject,
+                html: msg
+            }
+        );
 
-    console.log("mailto: '"+ info.response + "'");
+        console.log("mailto: '"+ info.response + "'");
+    }
+    catch(e: any) {
+        console.log('mailto: failed to send email');
+    }
 }

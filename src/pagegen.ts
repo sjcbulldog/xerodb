@@ -16,6 +16,9 @@ export function createMessageHtml(msg: string) : string {
         <div class="container">
           <section id="content">
             <p>$$$MESSAGE$$$</p>
+            <p></p>
+            <p></p>
+            <a href="/menu">Return to menu</a>
           </section>
         </div>
       </body>

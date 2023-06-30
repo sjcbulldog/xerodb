@@ -1,10 +1,36 @@
 <!DOCTYPE html>
-<html lang="en">
-    <head>
-    <title>XeroParts Database</title>
-    <link rel="stylesheet" href="login.css">
-    </head>
-    <body>
-        <h1>Not yet implemented - please talk to a mentor</h1>
-    </body>
+<html>
+<head>
+    <script type="text/javascript" src="/nologin/jquery-3.7.0.js"></script>
+    <link rel="stylesheet" href="/nologin/login.css">
+</head>
+<body>
+<div class="container">
+    <section id="content">
+        <h2 class="title">Lost Password</h2>
+            <form id="lostpwd" method="post" action="/users/lostpwd" enctype="application/x-www-form-urlencoded">      
+                <div>
+                    <input type="text" placeholder="User Name" id="username" name="username"/>
+                </div>
+        
+                <div>
+                    <input type="text" placeholder="Email" id="email" name="email"/>
+                </div>
+
+                <div>
+                    Enter either your user name or your password and instructions for recovery will be emailed to you.
+                </div>
+               
+                <div>
+                    <input type="submit" value="Submit" />
+                </div>
+            </form>
+        </div>
+    </section>
+</div>
+<script type="text/javascript" src="/normal/changepwd.js"></script>
+<script> 
+    var usernamevalue="$$$USERNAME$$$";
+</script>
+</body>
 </html>
