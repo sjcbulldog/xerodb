@@ -28,6 +28,7 @@ export class XeroDBConfig
     private url_ : string ;
     private port_ : number ;
     private email_ : EmailConfig ;
+    private production_ : boolean ;
 
     public static getXeroDBConfig() : XeroDBConfig {
         return XeroDBConfig.config ;
@@ -41,6 +42,8 @@ export class XeroDBConfig
         }
 
         if (process.env.PRODUCTION === 'true') {
+            this.production_ = true ;
+
             if (process.env.DATADIR !== undefined) {
                 this.datadir_ = process.env.DATADIR! ;
             }
@@ -72,14 +75,16 @@ export class XeroDBConfig
                 }
             }
 
-        } else {
+        } else if (process.env.PRODUCTION === 'false') {
+            this.production_ = false ;
             this.datadir_ = path.join(__dirname, '..', 'data') ;
             this.contentdir_ = path.join(__dirname, '..','content') ;
             this.port_ = 8000 ;
             this.url_ = 'http://127.0.0.1:' + this.port_ ;
         }
-
-
+        else {
+            throw new Error('the ".env" value PRODUCTIONS is not valid - must be either "true" or "false"');
+        }
 
         if (!fs.existsSync(this.datadir_)) {
             fs.mkdirSync(this.datadir_)
@@ -149,5 +154,9 @@ export class XeroDBConfig
 
     public email() : EmailConfig {
         return this.email_ ;
+    }
+
+    public production() : boolean {
+        return this.production_;
     }
 }

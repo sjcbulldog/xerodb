@@ -7,6 +7,7 @@ import { isLoggedIn, isAdmin } from './auth';
 import { XeroDBConfig } from './config';
 import { User } from './User';
 import { createMessageHtml } from './pagegen';
+import https from 'https' ;
 
 const nologinName: string = "/nologin/*" ;
 const adminName: string = "/admin/*" ;
@@ -73,6 +74,13 @@ app.all('/menu', (req, res) => {
   }
 });
 
-app.listen(config.port(), '0.0.0.0', 16, () => {
-  console.log(`[server]: Server is running at http://localhost:${config.port()}`);
-});
+if (config.production()) {
+  https.createServer(app).listen(config.port(), '0.0.0.0', 16, () => {
+    console.log(`xerodb: production server is running at "${config.url()}" on port ${config.port()}`);
+  }) ;
+}
+else {
+  app.listen(config.port(), '127.0.0.1', 16, () => {
+    console.log(`xerodb: development server is running at "${config.url()}" on port ${config.port()}`);
+  });
+}
