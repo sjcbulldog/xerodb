@@ -1,5 +1,6 @@
 import * as nodemailer from "nodemailer" ;
 import { EmailConfig, XeroDBConfig } from './config' ;
+import { xeroDBLoggerLog } from "./logger";
 
 const config = XeroDBConfig.getXeroDBConfig();
 
@@ -30,9 +31,10 @@ export async function sendEmail(to: string, subject: string, msg: string) {
             }
         );
 
-        console.log("mailto: '"+ info.response + "'");
+        xeroDBLoggerLog('INFO', "mailto: '"+ info.response + "'");
     }
     catch(e: any) {
-        console.log('mailto: failed to send email');
+        let err: Error = e as Error ;
+        xeroDBLoggerLog('ERROR', 'mailto: failed to send email - ' + err.message);
     }
 }

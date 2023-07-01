@@ -24,6 +24,7 @@ export class XeroDBConfig
     private datadir_ : string ;
     private contentdir_ : string ;
     private securitydir_ : string ;
+    private logdir_ : string ;
     private url_ : string ;
     private port_ : number ;
     private email_ : EmailConfig ;
@@ -47,15 +48,29 @@ export class XeroDBConfig
                 this.datadir_ = process.env.DATADIR! ;
             }
             else {
-                this.datadir_ = path.join(__dirname, 'data') ;
+                this.datadir_ = path.join(__dirname, '..', 'data') ;
+            }
+
+            if (process.env.LOGDIR !== undefined) {
+                this.logdir_ = process.env.LOGDIR! ;
+            }
+            else {
+                this.logdir_ = path.join(__dirname, '..', 'logs') ;
             }
 
             if (process.env.CONTENTDIR !== undefined) {
                 this.contentdir_ = process.env.CONTENTDIR! ;
             }
             else {
-                this.contentdir_ = path.join(__dirname, 'content') ;                
+                this.contentdir_ = path.join(__dirname, '..', 'content') ;                
             }
+
+            if (process.env.SECURITYDIR !== undefined) {
+                this.securitydir_ = process.env.SECURITYDIR;
+            }
+            else {
+                this.securitydir_ = path.join(__dirname, '..', 'security') ;
+            }            
 
             if (process.env.URL === undefined) {
                 throw new Error('the ".env" value URL is not defined');
@@ -74,18 +89,12 @@ export class XeroDBConfig
                 }
             }
 
-            if (process.env.SECURITYDIR !== undefined) {
-                this.securitydir_ = process.env.SECURITYDIR;
-            }
-            else {
-                this.securitydir_ = path.join(__dirname, 'security') ;
-            }
-
         } else if (process.env.PRODUCTION === 'false') {
             this.production_ = false ;
             this.datadir_ = path.join(__dirname, '..', 'data') ;
             this.contentdir_ = path.join(__dirname, '..','content') ;
-            this.securitydir_ = path.join(__dirname, 'security') ;
+            this.securitydir_ = path.join(__dirname, '..', 'security') ;
+            this.logdir_ = path.join(__dirname, '..', 'logs') ;
             this.port_ = 8000 ;
             this.url_ = 'http://127.0.0.1:' + this.port_ ;
         }
@@ -153,6 +162,10 @@ export class XeroDBConfig
 
     public securityDir() : string {
         return this.securitydir_ ;
+    }
+
+    public logDir() : string {
+        return this.logdir_ ;
     }
 
     public url() : string {

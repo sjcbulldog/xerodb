@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="/nologin/login.css">
+    <script type="text/javascript" src="/nologin/jquery-3.7.0.js"></script>
+    <script type="text/javascript" src="/admin/newrobot.js"></script>
+    <title>Edit User</title>
+</head>
+<body>
+    <div class="container">
+        <section id="content">
+            <form method="post" action="/robots/newrobot" enctype="application/x-www-form-urlencoded">
+                <h1>New Robot</h1>
+                <div>
+                    <input type="text" placeholder="Robot name" required="true" id="name" name="name" value=""/>
+                </div>
+                <div>
+                    <input type="text" placeholder="Description" required="true" id="desc" name="desc" value=""/>
+                </div>
+                <div>
+                    <input type="submit" value="Create Robot" />
+                    <a href="/menu">Main Menu</a>
+                </div>
+            </form><!-- form -->
+        </section><!-- content -->
+    </div><!-- container -->
+
+    <script> 
+        var usernamevalue="$$$USERNAME$$$";
+    </script>
+</body>
+</html>

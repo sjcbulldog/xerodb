@@ -1,4 +1,5 @@
 import express, { Express, Request, Response } from 'express' ;
+import morgan from 'morgan' ;
 import { UserService } from './UserService' ;
 import bodyParser from 'body-parser' ;
 import cookieParser from 'cookie-parser';
@@ -9,6 +10,9 @@ import { User } from './User';
 import { createMessageHtml } from './pagegen';
 import https from 'https' ;
 import fs from 'fs' ;
+import { RobotService } from './RobotService';
+import * as FileStreamRotator from 'file-stream-rotator' ;
+import { xeroDBLoggerInit, xeroDBLoggerLog } from './logger';
 
 const nologinName: string = "/nologin/*" ;
 const adminName: string = "/admin/*" ;
@@ -16,8 +20,24 @@ const normalName: string = "/normal/*" ;
 
 const config: XeroDBConfig = XeroDBConfig.getXeroDBConfig();
 const usersrv: UserService = new UserService(config.dataDir());
+const robotsrv: RobotService = new RobotService(usersrv, config.dataDir());
 const app: Express = express() ;
 
+var logStream = FileStreamRotator.getStream({
+  filename: path.join(config.logDir(), "xerodb-log-%DATE%"),
+  frequency: "daily", 
+  date_format: "YYYY-MM-DD", 
+  size: "100M",
+  max_logs: "100",
+  audit_file: path.join(config.logDir(), "audit.json"),
+  extension: ".log",
+  create_symlink: true,
+  symlink_name: "tail-current.log",
+}) ;
+
+xeroDBLoggerInit(logStream);
+
+app.use(morgan('combined', { stream: logStream }));
 app.use(express.json());
 app.use(bodyParser.urlencoded());
 app.use(bodyParser.json());
@@ -62,6 +82,10 @@ app.all('/users/*', (req, res) => {
   usersrv.get(req, res) ;
 });
 
+app.all('/robots/*', (req, res) => {
+  robotsrv.get(req, res) ;
+});
+
 app.all('/menu', (req, res) => {
   let u : User | null = usersrv.userFromRequest(req);
   if (u === null) {
@@ -81,11 +105,11 @@ if (config.production()) {
   var credentials = {key: privateKey, cert: certificate};
 
   https.createServer(credentials, app).listen(config.port(), '0.0.0.0', 16, () => {
-    console.log(`xerodb: production server is running at "${config.url()}" on port ${config.port()}`);
+    xeroDBLoggerLog('INFO', `xerodb: production server is running at "${config.url()}" on port ${config.port()}`);
   }) ;
 }
 else {
   app.listen(config.port(), '127.0.0.1', 16, () => {
-    console.log(`xerodb: development server is running at "${config.url()}" on port ${config.port()}`);
+    xeroDBLoggerLog('INFO', `xerodb: development server is running at "${config.url()}" on port ${config.port()}`);
   });
 }

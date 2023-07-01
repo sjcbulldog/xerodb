@@ -7,7 +7,6 @@ function getOneUser() {
         $('#email').val(data.email);
 
         var roles = "" ;
-        console.log('length: ' + data.roles.length);
         if (data.roles.length === 0 || (data.roles.length == 1 && data.roles[0].length == 0)) {
             roles = "" ;
         }
