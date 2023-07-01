@@ -1,8 +1,8 @@
 import sqlite3 from 'sqlite3' ;
 import { Response, Request } from 'express' ;
 import path from 'path';
-import { Robot } from "./Robot";
-import { createMessageHtml } from './pagegen';
+import { Robot, RobotPart } from "./Robot";
+import { createMessageHtml, processPage } from './pagegen';
 import { UserService } from './UserService';
 import { User } from './User';
 import { xeroDBLoggerLog } from './logger';
@@ -85,10 +85,9 @@ export class RobotService {
 
         sql = 
         `CREATE TABLE parts (
-            id int primary key not null,
+            parent int not null,
             robotid int not null,
             partno int not null,
-            parent int not null,
             desc text not null,
             type text not null,
             username text not null,
@@ -132,15 +131,6 @@ export class RobotService {
                 }
             })
         });        
-    }
-
-    private robotByName(name: string) {
-        for(let [key, robot] of this.robots_) {
-            if (robot.name_ === name)
-                return robot ;
-        }
-
-        return null ;
     }
 
     private attribMapToString(attribs: Map<string, string>) {
@@ -228,16 +218,14 @@ export class RobotService {
         return d.toISOString();
     }
 
-    private createNewPart(robot: number, part: number, parent: number, type: string, desc: string, user: string, attribs: Map<string, string>) : Error | number {
-        let ret: Error | number = -1 ;
+    private async createNewPart(parent: number, robot: number, partno: number, type: string, desc: string, user: string, attribs: Map<string, string>) : Promise<void> {
 
         this.assertAttribsValid(attribs);
 
         let sql = 'INSERT INTO parts VALUES (' ;
-        sql += String(this.nextkey_) + ',';
+        sql += String(parent) + "," ;
         sql += String(robot) + "," ;
-        sql += String(part) + "," ;
-        sql += String(parent) + ","
+        sql += String(partno) + ","
         sql += '"' + desc + '",' ;
         sql += '"' + type + '",' ;
         sql += '"' + user + '",' ;
@@ -245,76 +233,55 @@ export class RobotService {
         sql += '"' + this.now() + '",' ;
         sql += "'" + this.attribMapToString(attribs) + "');" ;
 
-        this.db_.exec(sql, (err) => {
-            if (err) {
-                xeroDBLoggerLog('ERROR', 'RobotService: failed to add part "' + part + '" to the database - ' + err) ;
-                xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"') ;
-                ret = err;
-            }
-            else {
-                this.nextkey_++ ;
-                xeroDBLoggerLog('INFO', 'UserService: added part "' + part + '" to the database');
-            }
-        }) ;
+        let ret: Promise<void> = new Promise<void>((resolve, reject) => {
+            this.db_.exec(sql, (err) => {
+                if (err) {
+                    xeroDBLoggerLog('ERROR', 'RobotService: failed to add part "' + this.partnoString(robot, partno) + '" to the database - ' + err) ;
+                    xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"') ;
+                    reject(err);
+                }
+                else {
+                    let partnostr: string = this.partnoString(robot, partno) ;
+                    this.users_.notify('part-added', 'A new part, number "' + partnostr + '" was added by "' + user + '"');
+                    xeroDBLoggerLog('INFO', 'UserService: added part "' + this.partnoString(robot, partno) + '" to the database');
+                    resolve() ;
+                }
+            });
+        }); 
 
         return ret;
     }
 
-    private newrobot(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
-        //
-        // Get the user creating the robot
-        //
-        let u: User | null = this.users_.userFromRequest(req);
-        if (u === null) {
-            res.send(createMessageHtml('Error', 'invalid user for request')) ;
-            return ;
-        }
+    private async getPartsForRobot(robot: number) : Promise<LooseObject[]> {
+        let ret: Promise<LooseObject[]> = new Promise<LooseObject[]>((resolve, reject) => {
+            let retval: LooseObject[] = [] ;
+            let sql = 'select robotid, parent, partno, desc, type from parts where robotid=' + String(robot) + ';' ;
+            this.db_.all(sql, async (err, rows) => {
+                for(let row of rows) {
+                    let obj: Object = row as Object;
+                    type ObjectKey = keyof typeof obj;
+                    const parentKey = 'parent' as ObjectKey;
+                    const partnoKey = 'partno' as ObjectKey;
+                    const descKey = 'desc' as ObjectKey;
+                    const typeKey = 'type' as ObjectKey;
 
-        //
-        // Create a new top level robot subsystem for the parts database, 
-        // Body: name, desc
-        //
-        let robotno: number = this.nextkey_++ ;
+                    let parent = (obj[parentKey] as unknown) as number;
+                    let partno = (obj[partnoKey] as unknown) as number ;
+                    let desc = (obj[descKey] as unknown) as string ;
+                    let type = (obj[typeKey] as unknown) as string ;
 
-        //
-        // First create a new part
-        //
-        let attribs: Map<string, string> = new Map<string, string>() ;
-        let topid = this.createNewPart(robotno, 1, 1, RobotService.partTypeAssembly, req.body.desc, u.username_, attribs);
+                    let partobj: LooseObject = {} ;
+                    partobj['parent'] = parent ;
+                    partobj['partno'] = partno ;
+                    partobj['desc'] = desc ;
+                    partobj['type'] = type ;
 
-        let tstr : string = typeof topid ;
-        if (tstr === "Error") {
-            let err: Error = topid as Error ;
-            res.send(createMessageHtml('Error', 'Error creating robot top level subsystem - ' + err.message));
-        }
-        else 
-        {
-            let current = this.now() ;
-
-            let sql = 'INSERT INTO robots VALUES (' ;
-            sql += String(robotno) + ',';
-            sql += '"' + req.body.name + '",' ;
-            sql += '"' + req.body.desc + '",' ;
-            sql += '"' + u.username_ + '",' ;
-            sql += '"' + current + '",' ;
-            sql += '"' + current + '",' ;
-            sql += String(1) + ");"
-
-            this.db_.exec(sql, (err) => {
-                if (err) {
-                    xeroDBLoggerLog('ERROR', 'RobotService: failed to add robot "' + req.body.name + '" to the database - ' + err) ;
-                    xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"') ;
+                    retval.push(partobj);
                 }
-                else {
-                    this.nextkey_++ ;
-                    xeroDBLoggerLog('INFO', 'UserService: added robot "' + req.body.name + '" to the database');
-
-                    let r: Robot = new Robot(robotno, req.body.name, req.body.desc, topid as number, u!.username_, current, current);
-                }
-            }) ;        
-
-            res.redirect('/menu') ;
-        }
+                resolve(retval) ;
+            });
+        }) ;
+        return ret ;
     }
 
     private partnoString(robot: number, part: number) : string {
@@ -331,7 +298,67 @@ export class RobotService {
         return rstr + '-' + pstr ;
     }
 
-    private listall(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>)  {
+    private stringToPartno(str: string) : number[] {
+        let ret: number[] = [] ;
+        let parts: string[] = str.split('-');
+
+        if (parts.length === 2) {
+            let robot: number = parseInt(parts[0], 10) ;
+            if ((typeof robot) === "number") {
+                let partno: number = parseInt(parts[1], 10) ;
+                if ((typeof partno) === "number") {
+                    ret.push(robot) ;
+                    ret.push(partno) ;
+                }
+            }
+        }
+
+        return ret;
+    }
+
+    private async newrobot(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        //
+        // Create a new top level robot subsystem for the parts database, 
+        // Body: name, desc
+        //
+        let robotno: number = this.nextkey_++ ;
+
+        //
+        // First create a new part
+        //
+        let attribs: Map<string, string> = new Map<string, string>() ;
+        await this.createNewPart(-robotno, robotno, 1, RobotService.partTypeAssembly, req.body.desc, u.username_, attribs);
+
+        let current = this.now() ;
+
+        let sql = 'INSERT INTO robots VALUES (' ;
+        sql += String(robotno) + ',';
+        sql += '"' + req.body.name + '",' ;
+        sql += '"' + req.body.desc + '",' ;
+        sql += '"' + u.username_ + '",' ;
+        sql += '"' + current + '",' ;
+        sql += '"' + current + '",' ;
+        sql += String(1) + ");"
+
+        await this.db_.exec(sql, (err) => {
+            if (err) {
+                xeroDBLoggerLog('ERROR', 'RobotService: failed to add robot "' + req.body.name + '" to the database - ' + err) ;
+                xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"') ;
+            }
+            else {
+                this.nextkey_++ ;
+                xeroDBLoggerLog('INFO', 'UserService: added robot "' + req.body.name + '" to the database');
+
+                let r: Robot = new Robot(robotno, req.body.name, req.body.desc, 1, u!.username_, current, current);
+                this.robots_.set(robotno, r);
+                this.users_.notify('robot-added', 'A new robot "' + req.body.name + '" was added by user "' + u.username_ + '"');
+            }
+        }) ;        
+
+        res.redirect('/menu') ;
+    }
+
+    private async listall(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>)  {
         let ret = [] ;
         for(let [key, robot] of this.robots_) {
             let nrobot: LooseObject = {} ;
@@ -346,18 +373,78 @@ export class RobotService {
         res.json(ret);
     }
 
+    private async viewpart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>)  {
+
+        if (req.query.partno === undefined) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/viewpart'));
+            return ;
+        }
+
+        let partno: number[] = this.stringToPartno(req.query.partno) ;
+        if (partno.length !== 2) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/viewpart'));
+            return ;
+        }
+
+        xeroDBLoggerLog('DEBUG', 'viewpart request, robot ' + String(partno[0]) + ", part " + String(partno[1])) ;
+        let vars:Map<string, string> = new Map<string, string>() ;
+        vars.set('$$$PARTNO$$$', req.query.partno);
+        res.send(processPage(vars, '/normal/viewpart.html'));
+    }
+
+    private async parttree(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {        let ret = [] ;
+        let result: LooseObject = {} ;
+        let partno: number[] = this.stringToPartno(req.query.partno);
+
+        if (partno.length !== 2) {
+            res.send(createMessageHtml('ERROR', 'invalid part number for REST API request'));
+            return ;
+        }
+
+        this.getPartsForRobot(partno[0])
+            .then((partobjs) => {
+                result['robot'] = partno[0];
+                result['top'] = partno[1] ;
+                result['parts'] = partobjs ;
+                res.json(result) ;
+            })
+            .catch((err) => {
+
+            }) ;
+    }
+
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
-        xeroDBLoggerLog('DEBUG',"UserService: rest api '" + req.path + "'");
+        xeroDBLoggerLog('DEBUG',"RobotService: rest api '" + req.path + "'");
+
+        let u: User | null = this.users_.userFromRequest(req);
+        if (u === null) {
+            xeroDBLoggerLog('ERROR',"RobotService: rest api '" + req.path + "' with invalid user");
+            res.send(createMessageHtml('Error', 'invalid user for request')) ;
+            return ;
+        }
+
         let handled: boolean = false ;
 
-        if (req.path === '/robots/newrobot') {
-            this.newrobot(req, res) ;
+        if (req.path === '/robots/listall') {
+            this.listall(u, req, res);
             handled = true ;
         }
-        else if (req.path === '/robots/listall') {
-            this.listall(req, res);
+        else if (req.path === '/robots/viewpart') {
+            this.viewpart(u, req, res) ;
             handled = true ;
         }
+        else if (req.path === '/robots/parttree') {
+            this.parttree(u, req, res);
+            handled = true ;
+        }
+
+        if (u.isAdmin()) {
+            if (req.path === '/robots/newrobot') {
+                this.newrobot(u, req, res) ;
+                handled = true ;
+            }
+        }
+
 
         if (!handled) {
             let msg: string = 'unknown robots REST API request "' + req.path + "'" ;

@@ -60,6 +60,9 @@ export class UserService {
         });
     }
 
+    public notify(activity: string, msg: string) {
+    }
+
     private allUsers(): Object {
         let ret: Object[] = [];
 
@@ -145,6 +148,8 @@ export class UserService {
 
                 sql = 'delete from confirm where token="' + token + '";';
                 this.db_.exec(sql);
+
+                this.notify('user-confirmed', 'the user "' + username + '" confirmed there email') ;
             });
         });
     }
@@ -257,6 +262,7 @@ export class UserService {
                     xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
                 }
                 else {
+                    this.notify('user-changed-password', 'The user "' + u.username_ + '" changed their password');
                     xeroDBLoggerLog('INFO', 'UserService: updated username "' + u.username_ + '" in the database');
                     u.password_ = hashed;
                 }
@@ -266,6 +272,8 @@ export class UserService {
 
     private editOneDone(req: Request<{}, any, any, any, Record<string, any>>): Error | null {
         let ret: Error | null = null;
+
+        let uch: User | null = this.userFromRequest(req);
 
         let u: User | null = this.userFromUserName(req.body.username);
         if (u === null) {
@@ -286,6 +294,15 @@ export class UserService {
             u.roles_ = this.roleStringtoRoles(req.body.roles);
             u.state_ = req.body.state;
             this.updateUser(u);
+
+            let changer: string = "" ;
+            if (uch === null) {
+                changer = "(null)" ;
+            }
+            else {
+                changer = uch.username_ ;
+            }
+            this.notify('user-changed', 'The user "' + u.username_ + '" was changed by admin "' + changer + '"');
         }
 
         return ret;
@@ -646,6 +663,7 @@ export class UserService {
                         this.sendConfirmationEmail(u);
                     }
                     xeroDBLoggerLog('INFO', 'UserService: added username "' + username + '" to the database');
+                    this.notify('user-added', 'The user "' + username + '" was added');
                 }
             });
         }
