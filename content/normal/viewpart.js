@@ -1,5 +1,16 @@
+
 $(document).ready(() => {
-    $.getJSON('/robots/parttree?partno='+partno, (data) => {
-        console.log('data: ' + data);
+    $("#parttree").fancytree({
+        source: {
+          url: "/robots/partdata?partno=" + partno,
+          cache: false
+        },
+        createNode: function(event, data) {
+          data.node.expanded = true ;
+        }
     });
+
+    var tree = $.ui.fancytree.getTree("#parttree");
+    tree.expandAll() ;
 });
+

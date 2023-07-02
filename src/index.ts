@@ -1,39 +1,39 @@
-import express, { Express, Request, Response } from 'express' ;
-import morgan from 'morgan' ;
-import { UserService } from './UserService' ;
-import bodyParser from 'body-parser' ;
+import express, { Express, Request, Response } from 'express';
+import morgan from 'morgan';
+import { UserService } from './UserService';
+import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import { isLoggedIn, isAdmin } from './auth';
 import { XeroDBConfig } from './config';
 import { User } from './User';
 import { createMessageHtml } from './pagegen';
-import https from 'https' ;
-import fs from 'fs' ;
+import https from 'https';
+import fs from 'fs';
 import { RobotService } from './RobotService';
-import * as FileStreamRotator from 'file-stream-rotator' ;
+import * as FileStreamRotator from 'file-stream-rotator';
 import { xeroDBLoggerInit, xeroDBLoggerLog } from './logger';
 
-const nologinName: string = "/nologin/*" ;
-const adminName: string = "/admin/*" ;
-const normalName: string = "/normal/*" ;
+const nologinName: string = "/nologin/*";
+const adminName: string = "/admin/*";
+const normalName: string = "/normal/*";
 
 const config: XeroDBConfig = XeroDBConfig.getXeroDBConfig();
 const usersrv: UserService = new UserService(config.dataDir());
 const robotsrv: RobotService = new RobotService(usersrv, config.dataDir());
-const app: Express = express() ;
+const app: Express = express();
 
 var logStream = FileStreamRotator.getStream({
   filename: path.join(config.logDir(), "xerodb-log-%DATE%"),
-  frequency: "daily", 
-  date_format: "YYYY-MM-DD", 
+  frequency: "daily",
+  date_format: "YYYY-MM-DD",
   size: "100M",
   max_logs: "100",
   audit_file: path.join(config.logDir(), "audit.json"),
   extension: ".log",
   create_symlink: true,
   symlink_name: "tail-current.log",
-}) ;
+});
 
 xeroDBLoggerInit(logStream);
 
@@ -46,10 +46,10 @@ app.use(cookieParser());
 app.get(nologinName, (req, res, next) => {
   let urlpath: string = req.url.substring(nologinName.length - 1);
   let filepath: string = path.join(config.contentDir(), 'nologin', urlpath);
-  let b: string = path.basename(filepath) ;
-  res.contentType(b) ;
+  let b: string = path.basename(filepath);
+  res.contentType(b);
   res.sendFile(filepath);
-}) ;
+});
 
 app.get(adminName, (req, res) => {
 
@@ -62,51 +62,92 @@ app.get(adminName, (req, res) => {
     res.contentType(path.basename(filepath));
     res.sendFile(filepath);
   }
-}) ;
+});
 
 app.get(normalName, (req, res, next) => {
-  if (!isLoggedIn(req, res))
-    return false ;
-
-  let urlpath: string = req.url.substring(normalName.length - 1);
-  let filepath: string = path.join(config.contentDir(), 'normal', urlpath);
-  res.contentType(path.basename(filepath));
-  res.sendFile(filepath);
-}) ;
+  if (!isLoggedIn(req, res)) {
+    res.status(403).send(createMessageHtml('Permission Denied', 'You cannot access the requested resource when you are not logged in'));
+  }
+  else {
+    let urlpath: string = req.url.substring(normalName.length - 1);
+    let filepath: string = path.join(config.contentDir(), 'normal', urlpath);
+    res.contentType(path.basename(filepath));
+    res.sendFile(filepath);
+  }
+});
 
 app.all('/', (req, res) => {
   res.redirect('/nologin/login.html');
 });
 
 app.all('/users/*', (req, res) => {
-  usersrv.get(req, res) ;
+  try {
+    usersrv.get(req, res);
+  }
+  catch (err) {
+    let errobj: Error = err as Error;
+
+    if (errobj !== undefined) {
+      if (errobj.stack !== undefined) {
+        xeroDBLoggerLog('DEBUG', errobj.stack.toString());
+      }
+    }
+    xeroDBLoggerLog('ERROR', 'exception caught for URL "' + req.url + '"');
+    res.status(500).send(createMessageHtml('Internal Error', 'internal error - exception thrown - check log file'));
+  }
 });
 
 app.all('/robots/*', (req, res) => {
-  robotsrv.get(req, res) ;
+  try {
+    robotsrv.get(req, res);
+  }
+  catch (err) {
+    let errobj: Error = err as Error;
+
+    if (errobj !== undefined) {
+      if (errobj.stack !== undefined) {
+        xeroDBLoggerLog('DEBUG', errobj.stack.toString());
+      }
+    }
+    xeroDBLoggerLog('ERROR', 'exception caught for URL "' + req.url + '"');
+    res.status(500).send(createMessageHtml('Internal Error', 'internal error - exception thrown - check log file'));
+  }
 });
 
 app.all('/menu', (req, res) => {
-  let u : User | null = usersrv.userFromRequest(req);
-  if (u === null) {
-    res.redirect('/');
+  try {
+    let u: User | null = usersrv.userFromRequest(req);
+    if (u === null) {
+      res.redirect('/');
+    }
+    else if (u.isAdmin()) {
+      res.redirect('/admin/menu.html');
+    }
+    else {
+      res.redirect('/normal/menu.html');
+    }
   }
-  else if (u.isAdmin()) {
-    res.redirect('/admin/menu.html') ;
-  }
-  else {
-    res.redirect('/normal/menu.html') ;
+  catch (err) {
+    let errobj: Error = err as Error;
+
+    if (errobj !== undefined) {
+      if (errobj.stack !== undefined) {
+        xeroDBLoggerLog('DEBUG', errobj.stack.toString());
+      }
+    }
+    xeroDBLoggerLog('ERROR', 'exception caught for URL "' + req.url + '"');
+    res.status(500).send(createMessageHtml('Internal Error', 'internal error - exception thrown - check log file'));
   }
 });
 
 if (config.production()) {
-  var privateKey  = fs.readFileSync(path.join(config.securityDir(), 'server.key'), 'utf8');
+  var privateKey = fs.readFileSync(path.join(config.securityDir(), 'server.key'), 'utf8');
   var certificate = fs.readFileSync(path.join(config.securityDir(), 'server.crt'), 'utf8');
-  var credentials = {key: privateKey, cert: certificate};
+  var credentials = { key: privateKey, cert: certificate };
 
   https.createServer(credentials, app).listen(config.port(), '0.0.0.0', 16, () => {
     xeroDBLoggerLog('INFO', `xerodb: production server is running at "${config.url()}" on port ${config.port()}`);
-  }) ;
+  });
 }
 else {
   app.listen(config.port(), '127.0.0.1', 16, () => {

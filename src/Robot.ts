@@ -19,19 +19,26 @@ export class Robot {
 }
 
 export class RobotPart {
+    parent_ : number;
     robot_ : number ;
     part_ : number;
-    parent_ : number;
     description_ : string ;
     type_ : string;
+    username_ : string;
+    created_ : string;
+    modified_ : string ;
     attribs_ : Map<string, string> ;
 
-    constructor(parent: number, robot: number, part: number, desc: string, type: string) {
+    constructor(parent: number, robot: number, part: number, desc: string, type: string, uname: string, created: string, modified: string, attribs: Map<string, string>) {
         this.parent_ = parent ;
         this.robot_ = robot ;
         this.part_ = part ;
         this.description_ = desc ;
         this.type_ = type ;
+        this.username_ = uname ;
+        this.created_ = created ;
+        this.modified_ = modified ;
+        this.attribs_ = attribs ;
         this.attribs_ = new Map<string, string>();
     }
 }

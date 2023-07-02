@@ -35,11 +35,13 @@ export class RobotService {
     db_ : sqlite3.Database;
     robots_ : Map<number, Robot> ;
     users_ : UserService ;
+    nextpart_ : Map<number, number> ;
 
     constructor(users: UserService, rootdir: string) {
         this.users_ = users ;
         this.nextkey_ = 1 ;
         this.robots_ = new Map<number, Robot>() ;
+        this.nextpart_ = new Map<number, number>() ;
         this.dbpath_ = path.join(rootdir, RobotService.robotFileName);
 
         this.db_ = new sqlite3.Database(this.dbpath_, sqlite3.OPEN_READWRITE, (err) => {
@@ -234,29 +236,35 @@ export class RobotService {
         sql += "'" + this.attribMapToString(attribs) + "');" ;
 
         let ret: Promise<void> = new Promise<void>((resolve, reject) => {
-            this.db_.exec(sql, (err) => {
-                if (err) {
-                    xeroDBLoggerLog('ERROR', 'RobotService: failed to add part "' + this.partnoString(robot, partno) + '" to the database - ' + err) ;
-                    xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"') ;
-                    reject(err);
-                }
-                else {
-                    let partnostr: string = this.partnoString(robot, partno) ;
-                    this.users_.notify('part-added', 'A new part, number "' + partnostr + '" was added by "' + user + '"');
-                    xeroDBLoggerLog('INFO', 'UserService: added part "' + this.partnoString(robot, partno) + '" to the database');
-                    resolve() ;
-                }
-            });
+            try {
+                this.db_.exec(sql, (err) => {
+                    if (err) {
+                        xeroDBLoggerLog('ERROR', 'RobotService: failed to add part "' + this.partnoString(robot, partno) + '" to the database - ' + err) ;
+                        xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"') ;
+                        reject(err);
+                    }
+                    else {
+                        let partnostr: string = this.partnoString(robot, partno) ;
+                        this.users_.notify('part-added', 'A new part, number "' + partnostr + '" was added by "' + user + '"');
+                        xeroDBLoggerLog('INFO', 'UserService: added part "' + this.partnoString(robot, partno) + '" to the database');
+                        resolve() ;
+                    }
+                });
+            }
+            catch(err) {
+                xeroDBLoggerLog('ERROR', 'createNewPart - sql threw exception');
+            }
         }); 
 
         return ret;
     }
 
-    private async getPartsForRobot(robot: number) : Promise<LooseObject[]> {
-        let ret: Promise<LooseObject[]> = new Promise<LooseObject[]>((resolve, reject) => {
-            let retval: LooseObject[] = [] ;
-            let sql = 'select robotid, parent, partno, desc, type from parts where robotid=' + String(robot) + ';' ;
+    private async getPartsForRobot(robot: number) : Promise<RobotPart[]> {
+        let ret: Promise<RobotPart[]> = new Promise<RobotPart[]>((resolve, reject) => {
+            let retval: RobotPart[] = [] ;
+            let sql = 'select robotid, parent, partno, desc, type, username from parts where robotid=' + String(robot) + ';' ;
             this.db_.all(sql, async (err, rows) => {
+                let maxpart: number = 0 ;
                 for(let row of rows) {
                     let obj: Object = row as Object;
                     type ObjectKey = keyof typeof obj;
@@ -264,20 +272,38 @@ export class RobotService {
                     const partnoKey = 'partno' as ObjectKey;
                     const descKey = 'desc' as ObjectKey;
                     const typeKey = 'type' as ObjectKey;
+                    const usernameKey = 'username' as ObjectKey ;
+                    const createdKey = 'created' as ObjectKey ;
+                    const modifiedKey = 'modified' as ObjectKey ;
+                    const attribsKey = 'attribs' as ObjectKey;
 
                     let parent = (obj[parentKey] as unknown) as number;
                     let partno = (obj[partnoKey] as unknown) as number ;
                     let desc = (obj[descKey] as unknown) as string ;
                     let type = (obj[typeKey] as unknown) as string ;
+                    let username = (obj[usernameKey] as unknown) as string ;
+                    let created = (obj[createdKey] as unknown) as string ;
+                    let modified = (obj[modifiedKey] as unknown) as string ;
+                    let attribs = (obj[attribsKey] as unknown) as string ;
 
-                    let partobj: LooseObject = {} ;
-                    partobj['parent'] = parent ;
-                    partobj['partno'] = partno ;
-                    partobj['desc'] = desc ;
-                    partobj['type'] = type ;
+                    if (partno > maxpart) {
+                        maxpart = partno ;
+                    }
+
+                    let attrlist : Map<string, string> ;
+                    if (attribs === undefined) {
+                        attrlist = new Map<string, string>() ;
+                    } else {
+                        attrlist = this.stringToAttribMap(attribs);
+                    }
+
+                    let partobj: RobotPart = new RobotPart(parent, robot, partno, desc, type, username, created, modified, attrlist);
 
                     retval.push(partobj);
                 }
+
+                maxpart++ ;
+                this.nextpart_.set(robot, maxpart);
                 resolve(retval) ;
             });
         }) ;
@@ -316,6 +342,95 @@ export class RobotService {
         return ret;
     }
 
+    private partToLoose(part: RobotPart) : LooseObject {
+        let ret: LooseObject = {} ;
+        let title: string = this.partnoString(part.robot_, part.part_) + ':' + part.type_ + ':' + part.description_;
+        let icon: string ;
+
+        let elink : string = '  <a title="Edit" href="/robots/edit?partno=' + this.partnoString(part.robot_, part.part_) + '">' + 
+                                '<img src="/nologin/images/e.png" width="20" height="20"></a>' ;
+        let alink: string = "" ;
+        let clink: string = "" ;
+        let mlink: string = "" ;
+
+        if (part.type_ === RobotService.partTypeAssembly) {
+            alink = '<a title="Add Assembly" href="/robots/newpart?robot=' + String(part.robot_) + '&parent=' + 
+                                String(part.part_) + '&type=' + RobotService.partTypeAssembly + '">' + 
+                                '<img src="/nologin/images/a.png" width="20" height="20"></a>' ;
+            clink = '<a title="Add COTS Part" href="/robots/newpart?robot=' + String(part.robot_) + '&parent=' + 
+                                String(part.part_) + '&type=' + RobotService.partTypeCOTS + '">' + 
+                                '<img src="/nologin/images/c.png" width="20" height="20"></a>' ;                                    
+            mlink = '<a title="Add Manufactured Part" href="/robots/newpart?robot=' + String(part.robot_) + '&parent=' + 
+                                String(part.part_) + '&type=' + RobotService.partTypeManufactured + '">' + 
+                                '<img src="/nologin/images/m.png" width="20" height="20"></a>' ;
+
+            icon = '/nologin/images/empty.png' ;
+        }
+        else if (part.type_ === RobotService.partTypeCOTS) {
+            icon = '/nologin/images/file.png' ;
+        }
+        else if (part.type_ === RobotService.partTypeManufactured) {
+            icon = '/nologin/images/file.png' ;
+        }
+        else {
+            icon = '/nologin/images/file.png' ;
+        }
+
+        title += elink + ' ' + alink + ' ' + clink + ' ' + mlink ;
+
+        ret['title'] = title ;
+        ret['key'] = this.partnoString(part.robot_, part.part_) ;
+        ret['icon'] = icon ;
+
+        if (part.type_ === RobotService.partTypeAssembly) {
+            ret['folder'] = true ;
+        }
+
+        return ret;
+    }
+    
+    private findPartById(id: number, parts: RobotPart[]) : RobotPart | null {
+        for(let part of parts) {
+            if (part.part_ === id)
+                return part ;
+        }
+
+        return null ;
+    }
+
+    private appendChild(parent: LooseObject, child: LooseObject) {
+        if (parent['children'] === undefined) {
+            parent['children'] = [] ;
+            parent['icon'] = '/nologin/images/empty.png' ;
+        }
+        parent['children'].push(child);
+    }
+
+    private addChildren(obj: LooseObject, parent: number, parts: RobotPart[]) {
+        for(let part of parts) {
+            if (part.parent_ === parent) {
+                let child: LooseObject = this.partToLoose(part);
+                this.appendChild(obj, child);
+                if (part.type_ === RobotService.partTypeAssembly) {
+                    this.addChildren(child, part.part_, parts);
+                }
+            }
+        }
+    }
+
+    private partsToTree(id: number, parts: RobotPart[]) : LooseObject[] {
+        let ret: LooseObject[] = [] ;
+
+        let toppart: RobotPart | null = this.findPartById(id, parts);
+        if (toppart !== null) {
+            let top: LooseObject = this.partToLoose(toppart);
+            ret.push(top);
+            this.addChildren(top, id, parts);
+        }
+
+        return ret ;
+    }
+
     private async newrobot(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         //
         // Create a new top level robot subsystem for the parts database, 
@@ -352,6 +467,8 @@ export class RobotService {
                 let r: Robot = new Robot(robotno, req.body.name, req.body.desc, 1, u!.username_, current, current);
                 this.robots_.set(robotno, r);
                 this.users_.notify('robot-added', 'A new robot "' + req.body.name + '" was added by user "' + u.username_ + '"');
+
+                this.nextpart_.set(robotno, 2);
             }
         }) ;        
 
@@ -392,9 +509,19 @@ export class RobotService {
         res.send(processPage(vars, '/normal/viewpart.html'));
     }
 
-    private async parttree(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {        let ret = [] ;
+    private async partdata(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {        
         let result: LooseObject = {} ;
-        let partno: number[] = this.stringToPartno(req.query.partno);
+
+        if (req.query.partno === undefined) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/viewpart'));
+            return ;
+        }
+
+        let partno: number[] = this.stringToPartno(req.query.partno) ;
+        if (partno.length !== 2) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/viewpart'));
+            return ;
+        }
 
         if (partno.length !== 2) {
             res.send(createMessageHtml('ERROR', 'invalid part number for REST API request'));
@@ -403,14 +530,41 @@ export class RobotService {
 
         this.getPartsForRobot(partno[0])
             .then((partobjs) => {
-                result['robot'] = partno[0];
-                result['top'] = partno[1] ;
-                result['parts'] = partobjs ;
+                let result = this.partsToTree(partno[1], partobjs) ;
                 res.json(result) ;
             })
             .catch((err) => {
 
             }) ;
+    }
+
+    private async newpart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        if (req.query.parent === undefined) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/newpart'));
+            return ;
+        }
+
+        if (req.query.parent === undefined) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/newpart'));
+            return ;
+        }
+
+        if (req.query.type === undefined) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/newpart'));
+            return ;
+        }
+
+        let parent: number = parseInt(req.query.parent, 10);
+        let robot: number = parseInt(req.query.robot, 10);
+        let type: string = req.query.type ;
+        let attribs: Map<string, string> = new Map<string, string>() ;
+
+        let newpartno: number = this.nextpart_.get(robot)!
+        this.nextpart_.set(robot, newpartno + 1) ;
+        await this.createNewPart(parent, robot, newpartno, type, 'New Robot Part', u.username_, attribs);
+
+        let url: string = '/robots/viewpart?partno=' + this.partnoString(robot, 1) ;
+        res.redirect(url) ;
     }
 
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
@@ -433,8 +587,12 @@ export class RobotService {
             this.viewpart(u, req, res) ;
             handled = true ;
         }
-        else if (req.path === '/robots/parttree') {
-            this.parttree(u, req, res);
+        else if (req.path === '/robots/partdata') {
+            this.partdata(u, req, res);
+            handled = true ;
+        }
+        else if (req.path === '/robots/newpart') {
+            this.newpart(u, req, res);
             handled = true ;
         }
 
@@ -444,7 +602,6 @@ export class RobotService {
                 handled = true ;
             }
         }
-
 
         if (!handled) {
             let msg: string = 'unknown robots REST API request "' + req.path + "'" ;
