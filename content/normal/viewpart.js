@@ -1,24 +1,37 @@
-$(document).ready(() => {
-  $("#parttree").fancytree({
-    extensions: ["contextMenu"],
-    source: {
-      url: "/robots/partdata?partno=" + partno,
-      cache: false
+document.addEventListener("DOMContentLoaded", (event) => {
+  new mar10.Wunderbaum({
+    id: "demo",
+    element: document.getElementById("parttree"),
+    source:  {
+      url: "/robots/partdata?partno=" + partno
     },
-    createNode: function (event, data) {
-      data.node.expanded = true;
+    columns: [
+      { id: "*", title: "Part Number", width: "200px" },
+      { id: "ntype", title: "Type", width: "120px" },
+      { id: "desc", title: "Description", width: "460px" },
+      { id: "creator", title: "Created By", width: "180px" },
+    ],
+    load: function(e) {
+      e.tree.expandAll() ;
     },
-    contextMenu: {
-      menu: function (node) {
-        var items = [] ;
-        items.push({ 'title' : 'Edit', cmd: 'edit'});
-        items.push({ 'title' : 'Add Assembly', cmd: 'edit'});
-        items.push({ 'title' : 'Add COTS', cmd: 'edit'});
-        items.push({ 'title' : 'Add Manufactured', cmd: 'edit'});
-        items.push({ 'title' : 'Delete', cmd: 'edit'});
-        return items ;
+    render : function(e) {
+      // console.log(e.type, e.isNew, e);
+      const node = e.node;
+      // const util = e.util;
+  
+      for (const col of Object.values(e.renderColInfosById)) {
+        switch (col.id) {
+          default:
+            // Assumption: we named column.id === node.data.NAME
+            col.elem.textContent = node.data[col.id];
+            break;
+        }
       }
+    },
+    activate: function(e) {
+    },
+    dblclick: function(e) {
+      window.location.href = "/robots/editpart?partno=" + e.node.key ;
     }
   });
-});
-
+}) ;

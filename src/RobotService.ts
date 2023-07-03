@@ -344,22 +344,22 @@ export class RobotService {
 
     private partToLoose(part: RobotPart) : LooseObject {
         let ret: LooseObject = {} ;
-        let title: string = this.partnoString(part.robot_, part.part_) + ':' + part.type_ + ':' + part.description_;
+        let title: string = this.partnoString(part.robot_, part.part_);
         let icon: string ;
 
         let ntype: string = "" ;
 
         if (part.type_ === RobotService.partTypeAssembly) {
             icon = '/nologin/images/empty.png' ;
-            ntype = 'A' ;
+            ntype = 'Assembly' ;
         }
         else if (part.type_ === RobotService.partTypeCOTS) {
             icon = '/nologin/images/file.png' ;
-            ntype = 'C' ;
+            ntype = 'COTS' ;
         }
         else if (part.type_ === RobotService.partTypeManufactured) {
             icon = '/nologin/images/file.png' ;
-            ntype = 'M' ;
+            ntype = 'Manufactured' ;
         }
         else {
             icon = '/nologin/images/file.png' ;
@@ -367,8 +367,11 @@ export class RobotService {
         }
 
         ret['title'] = title ;
-        ret['key'] = ntype + "," + this.partnoString(part.robot_, part.part_) ;
+        ret['key'] = this.partnoString(part.robot_, part.part_) ;
         ret['icon'] = icon ;
+        ret['ntype'] = ntype ;
+        ret['desc'] = part.description_ ;
+        ret['creator'] = part.username_ ;
 
         if (part.type_ === RobotService.partTypeAssembly) {
             ret['folder'] = true ;
@@ -555,6 +558,29 @@ export class RobotService {
         res.redirect(url) ;
     }
 
+
+    private async editpart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        if (req.query.partno === undefined) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/viewpart'));
+            return ;
+        }
+
+        let partno: number[] = this.stringToPartno(req.query.partno) ;
+        if (partno.length !== 2) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/viewpart'));
+            return ;
+        }
+
+        if (partno.length !== 2) {
+            res.send(createMessageHtml('ERROR', 'invalid part number for REST API request'));
+            return ;
+        }
+
+        let vars:Map<string, string> = new Map<string, string>() ;
+        vars.set('$$$PARTNO$$$', req.query.partno);
+        res.send(processPage(vars, '/normal/editpart.html'));
+    }
+
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         xeroDBLoggerLog('DEBUG',"RobotService: rest api '" + req.path + "'");
 
@@ -581,6 +607,10 @@ export class RobotService {
         }
         else if (req.path === '/robots/newpart') {
             this.newpart(u, req, res);
+            handled = true ;
+        }
+        else if (req.path === '/robots/editpart') {
+            this.editpart(u, req, res);
             handled = true ;
         }
 
