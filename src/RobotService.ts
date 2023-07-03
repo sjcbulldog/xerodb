@@ -347,39 +347,27 @@ export class RobotService {
         let title: string = this.partnoString(part.robot_, part.part_) + ':' + part.type_ + ':' + part.description_;
         let icon: string ;
 
-        let elink : string = '  <a title="Edit" href="/robots/edit?partno=' + this.partnoString(part.robot_, part.part_) + '">' + 
-                                '<img src="/nologin/images/e.png" width="20" height="20"></a>' ;
-        let alink: string = "" ;
-        let clink: string = "" ;
-        let mlink: string = "" ;
+        let ntype: string = "" ;
 
         if (part.type_ === RobotService.partTypeAssembly) {
-            alink = '<a title="Add Assembly" href="/robots/newpart?robot=' + String(part.robot_) + '&parent=' + 
-                                String(part.part_) + '&type=' + RobotService.partTypeAssembly + '">' + 
-                                '<img src="/nologin/images/a.png" width="20" height="20"></a>' ;
-            clink = '<a title="Add COTS Part" href="/robots/newpart?robot=' + String(part.robot_) + '&parent=' + 
-                                String(part.part_) + '&type=' + RobotService.partTypeCOTS + '">' + 
-                                '<img src="/nologin/images/c.png" width="20" height="20"></a>' ;                                    
-            mlink = '<a title="Add Manufactured Part" href="/robots/newpart?robot=' + String(part.robot_) + '&parent=' + 
-                                String(part.part_) + '&type=' + RobotService.partTypeManufactured + '">' + 
-                                '<img src="/nologin/images/m.png" width="20" height="20"></a>' ;
-
             icon = '/nologin/images/empty.png' ;
+            ntype = 'A' ;
         }
         else if (part.type_ === RobotService.partTypeCOTS) {
             icon = '/nologin/images/file.png' ;
+            ntype = 'C' ;
         }
         else if (part.type_ === RobotService.partTypeManufactured) {
             icon = '/nologin/images/file.png' ;
+            ntype = 'M' ;
         }
         else {
             icon = '/nologin/images/file.png' ;
+            ntype = '?';
         }
 
-        title += elink + ' ' + alink + ' ' + clink + ' ' + mlink ;
-
         ret['title'] = title ;
-        ret['key'] = this.partnoString(part.robot_, part.part_) ;
+        ret['key'] = ntype + "," + this.partnoString(part.robot_, part.part_) ;
         ret['icon'] = icon ;
 
         if (part.type_ === RobotService.partTypeAssembly) {
