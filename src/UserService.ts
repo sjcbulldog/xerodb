@@ -60,6 +60,43 @@ export class UserService {
         });
     }
 
+    private loadUsers() {
+        let sql =
+            `
+            select id, username, password, lastname, firstname, email, state, roles from users;
+            `;
+        this.db_.all(sql, (err, rows) => {
+            rows.forEach(row => {
+                let obj: Object = row as Object;
+                type ObjectKey = keyof typeof obj;
+                const idKey = 'id' as ObjectKey;
+                const usernameKey = 'username' as ObjectKey;
+                const passwordKey = 'password' as ObjectKey;
+                const lastnameKey = 'lastname' as ObjectKey;
+                const firstnameKey = 'firstname' as ObjectKey;
+                const emailKey = 'email' as ObjectKey;
+                const stateKey = 'state' as ObjectKey;
+                const rolesKey = 'roles' as ObjectKey;
+
+                let id = (obj[idKey] as unknown) as number;
+                let username = obj[usernameKey] as unknown;
+                let password = obj[passwordKey] as unknown;
+                let lastname = obj[lastnameKey] as unknown;
+                let firstname = obj[firstnameKey] as unknown;
+                let email = obj[emailKey] as unknown;
+                let state = obj[stateKey] as unknown;
+                let roles = obj[rolesKey] as unknown;
+                let u: User = new User(id, username as string, password as string, lastname as string,
+                    firstname as string, email as string, state as string, this.roleStringtoRoles(roles as string));
+                this.users_.set(username as string, u);
+
+                if (this.nextkey_ < id + 1) {
+                    this.nextkey_ = id + 1;
+                }
+            })
+        });
+    }
+
     public notify(activity: string, msg: string) {
     }
 
@@ -188,7 +225,36 @@ export class UserService {
         });
     }
 
-    private processNewPassword(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+    private getRandomValues(data: Uint8Array): Uint8Array {
+        for (let i = 0; i < data.length; i++) {
+            data[i] = Math.floor(Math.random() * 256);
+        }
+
+        return data;
+    }
+
+    private changePassword(u: User, password: string) {
+        let hashed: string = this.hashPassword(password);
+        if (hashed !== u.password_) {
+            let sql: string = 'UPDATE users SET ';
+            sql += 'password = "' + hashed + '" ';
+            sql += 'WHERE username="' + u.username_ + '"';
+
+            this.db_.exec(sql, (err) => {
+                if (err) {
+                    xeroDBLoggerLog('ERROR', 'UserService: failed to update user "' + u.username_ + '" to the database - ' + err);
+                    xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
+                }
+                else {
+                    this.notify('user-changed-password', 'The user "' + u.username_ + '" changed their password');
+                    xeroDBLoggerLog('INFO', 'UserService: updated username "' + u.username_ + '" in the database');
+                    u.password_ = hashed;
+                }
+            });
+        }
+    }
+
+    private async processNewPassword(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         let sql = 'select token, username from lostpwd where token="' + req.body.token + '";';
         this.db_.all(sql, (err, rows) => {
             if (rows.length !== 1) {
@@ -240,36 +306,7 @@ export class UserService {
             }
         });
     }
-
-    private getRandomValues(data: Uint8Array): Uint8Array {
-        for (let i = 0; i < data.length; i++) {
-            data[i] = Math.floor(Math.random() * 256);
-        }
-
-        return data;
-    }
-
-    private changePassword(u: User, password: string) {
-        let hashed: string = this.hashPassword(password);
-        if (hashed !== u.password_) {
-            let sql: string = 'UPDATE users SET ';
-            sql += 'password = "' + hashed + '" ';
-            sql += 'WHERE username="' + u.username_ + '"';
-
-            this.db_.exec(sql, (err) => {
-                if (err) {
-                    xeroDBLoggerLog('ERROR', 'UserService: failed to update user "' + u.username_ + '" to the database - ' + err);
-                    xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
-                }
-                else {
-                    this.notify('user-changed-password', 'The user "' + u.username_ + '" changed their password');
-                    xeroDBLoggerLog('INFO', 'UserService: updated username "' + u.username_ + '" in the database');
-                    u.password_ = hashed;
-                }
-            });
-        }
-    }
-
+    
     private editOneDone(req: Request<{}, any, any, any, Record<string, any>>): Error | null {
         let ret: Error | null = null;
 
@@ -291,8 +328,21 @@ export class UserService {
             u.email_ = req.body.email;
             u.firstname_ = req.body.firstname;
             u.lastname_ = req.body.lastname
-            u.roles_ = this.roleStringtoRoles(req.body.roles);
             u.state_ = req.body.state;
+
+            u.roles_ = [] ;
+            if (req.body.admin && req.body.admin === 'on') {
+                u.roles_.push('admin');
+            }
+
+            if (req.body.mentor && req.body.mentor === 'on') {
+                u.roles_.push('mentor');
+            }
+
+            if (req.body.student && req.body.student === 'on') {
+                u.roles_.push('student');
+            }
+
             this.updateUser(u);
 
             let changer: string = "" ;
@@ -308,7 +358,7 @@ export class UserService {
         return ret;
     }
 
-    private lostPassword(req: Request<{}, any, any, any, Record<string, any>>) {
+    private async lostPassword(req: Request<{}, any, any, any, Record<string, any>>) {
         let email: string = req.body.email;
         let u: User | null = null;
 
@@ -324,6 +374,22 @@ export class UserService {
         }
     }
 
+    private async withRole(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+
+        if (!req.query || !req.query.role) {
+            res.send(createMessageHtml('Error', 'invalid call to USERS rest API /users/withrole')) ;
+            return ;
+        }
+
+        let result : string[]  = [] ;
+        for(let [key, value] of this.users_) {
+            if (value.roles_.indexOf(req.query.role) !== -1) {
+                result.push(value.username_);
+            }
+        }
+        res.json(result);
+    }
+
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         xeroDBLoggerLog('DEBUG', "UserService: rest api '" + req.path + "'");
         let handled: boolean = false;
@@ -332,6 +398,10 @@ export class UserService {
             this.lostPassword(req);
             res.send(createMessageHtml('Lost Password', 'If the username or email were valid, look for email instructions.  If they do not arrive, check your SPAM or JUNK folder'));
             handled = true;
+        }
+        else if (req.path === '/users/withrole') {
+            this.withRole(req, res);
+            handled = true ;
         }
         else if (req.path === '/users/lostpwd2') {
             this.processNewPassword(req, res);
@@ -719,40 +789,4 @@ export class UserService {
         this.db_.exec(sql)
     }
 
-    private loadUsers() {
-        let sql =
-            `
-            select id, username, password, lastname, firstname, email, state, roles from users;
-            `;
-        this.db_.all(sql, (err, rows) => {
-            rows.forEach(row => {
-                let obj: Object = row as Object;
-                type ObjectKey = keyof typeof obj;
-                const idKey = 'id' as ObjectKey;
-                const usernameKey = 'username' as ObjectKey;
-                const passwordKey = 'password' as ObjectKey;
-                const lastnameKey = 'lastname' as ObjectKey;
-                const firstnameKey = 'firstname' as ObjectKey;
-                const emailKey = 'email' as ObjectKey;
-                const stateKey = 'state' as ObjectKey;
-                const rolesKey = 'roles' as ObjectKey;
-
-                let id = (obj[idKey] as unknown) as number;
-                let username = obj[usernameKey] as unknown;
-                let password = obj[passwordKey] as unknown;
-                let lastname = obj[lastnameKey] as unknown;
-                let firstname = obj[firstnameKey] as unknown;
-                let email = obj[emailKey] as unknown;
-                let state = obj[stateKey] as unknown;
-                let roles = obj[rolesKey] as unknown;
-                let u: User = new User(id, username as string, password as string, lastname as string,
-                    firstname as string, email as string, state as string, this.roleStringtoRoles(roles as string));
-                this.users_.set(username as string, u);
-
-                if (this.nextkey_ < id + 1) {
-                    this.nextkey_ = id + 1;
-                }
-            })
-        });
-    }
 }

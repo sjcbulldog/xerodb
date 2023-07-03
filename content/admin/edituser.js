@@ -6,19 +6,18 @@ function getOneUser() {
         $('#lastname').val(data.lastname) ;
         $('#email').val(data.email);
 
-        var roles = "" ;
-        if (data.roles.length === 0 || (data.roles.length == 1 && data.roles[0].length == 0)) {
-            roles = "" ;
+        if (data.roles.indexOf('admin') !== -1) {
+            $('#admin').prop('checked', true);
         }
-        else {
-            for(var role of data.roles) {
-                if (roles.length > 0) {
-                    roles += "," ;
-                }
-                roles += role ;
-            }
+
+        if (data.roles.indexOf('mentor') !== -1) {
+            $('#mentor').prop('checked', true);
         }
-        $('#roles').val(roles);
+
+        if (data.roles.indexOf('student') !== -1) {
+            $('#student').prop('checked', true);
+        }
+
         $('#state').val(data.state);
     }) ;
 }

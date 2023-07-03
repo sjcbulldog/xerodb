@@ -1,4 +1,33 @@
-function addOneAttribute(attr, lastone) {
+function addOneSelect(attr, lastone, choices, value) {
+    var parent = lastone.parentElement;
+
+    var div = document.createElement('div') ;
+    var nextone = lastone.nextElementSibling;
+    parent.insertBefore(div, nextone) ;
+
+    var label = document.createElement('label') ;
+    label.for = attr.key;
+    label.textContent = attr.key ;
+    div.appendChild(label) ;
+
+    var select = document.createElement('select');
+    select.id = attr.key ;
+    select.name = attr.key ;
+
+    for(let choice of choices) {
+        let opt = document.createElement('option');
+        opt.value = choice ;
+        opt.innerHTML = choice ;
+        select.appendChild(opt) ;
+    }
+
+    select.value = value ;
+    div.appendChild(select) ;
+
+    return div ;
+}
+
+function addOneInput(attr, lastone) {
     var parent = lastone.parentElement;
 
     var div = document.createElement('div') ;
@@ -20,6 +49,7 @@ function addOneAttribute(attr, lastone) {
     else if (attr.desc.type === 'double') {
         input.type = 'text' ;        
     }
+
     if (attr.desc.required) {
         input.required = true ;
     }
@@ -27,7 +57,7 @@ function addOneAttribute(attr, lastone) {
     input.id = attr.key ;
     input.value = attr.value ;
     input.name = attr.key ;
-    input.placeholder = attr.key ;
+    input.placeholder = attr.key ;       
     div.appendChild(input) ;
 
     return div ;
@@ -35,19 +65,32 @@ function addOneAttribute(attr, lastone) {
 
 function getOnePart() {
     $.getJSON('/robots/partinfo?partno=' + partnovalue, (data) => {
-        $('#partnotext').html('<b>' + data.key + ', ' + data.ntype + '</b>');
+        $.getJSON('/users/withrole?role=mentor', (mentors) => {
+            $.getJSON('/users/withrole?role=student', (students) => {
+                $('#partnotext').html('<b>' + data.key + ', ' + data.ntype + '</b>');
 
-        var lastone = document.getElementById('lastone') ;
-        for(var attr of data.attribs) {
-            lastone = addOneAttribute(attr, lastone);
-        }
+                var lastone = document.getElementById('lastone') ;
+                for(var attr of data.attribs) {
+                    var choices = [] ;
+                    if (attr.desc.type === 'mentor') {
+                        lastone = addOneSelect(attr, lastone, mentors, attr.value) ;
+                    }
+                    else if (attr.desc.type === 'student') {
+                        lastone = addOneSelect(attr, lastone, students, attr.value);
+                    }
+                    else {
+                        lastone = addOneInput(attr, lastone);
+                    }
+                }
 
-        if (data.desc !== 'Double Click To Edit') {
-            $('#desc').val(data.desc)
-        }
+                if (data.desc !== 'Double Click To Edit') {
+                    $('#desc').val(data.desc)
+                }
 
-        $('#quantity').val(data.quantity);
-        $('#partno').val(partnovalue)
+                $('#quantity').val(data.quantity);
+                $('#partno').val(partnovalue)
+            });
+        });
     }) ;
 }
 

@@ -39,13 +39,13 @@ export class RobotService {
     ] ;
 
     private static readonly AssemblyAttributes = [
-        new PartAttr('Design Student', PartAttr.TypeStringName, false, ''),
-        new PartAttr('Design Mentor', PartAttr.TypeStringName, false, ''),
+        new PartAttr('Design Student', PartAttr.TypeStudentName, false, ''),
+        new PartAttr('Design Mentor', PartAttr.TypeMentorName, false, ''),
     ] ;
 
     private static readonly ManufacturedAttributes = [
-        new PartAttr('Design Student', PartAttr.TypeStringName, false, ''),
-        new PartAttr('Design Mentor', PartAttr.TypeStringName, false, ''),
+        new PartAttr('Design Student', PartAttr.TypeStudentName, false, ''),
+        new PartAttr('Design Mentor', PartAttr.TypeMentorName, false, ''),
     ] ;
 
     nextkey_ : number ;
