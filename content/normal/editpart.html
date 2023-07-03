@@ -4,7 +4,7 @@
     <link rel="stylesheet" href="/nologin/login.css">
     <script type="text/javascript" src="/nologin/jquery/jquery-3.7.0.js"></script>
     <script type="text/javascript" src="/normal/editpart.js"></script>
-    <title>Edit User</title>
+    <title>Edit Part</title>
 </head>
 <body>
     <div class="container">
@@ -15,7 +15,7 @@
                     <p id="partnotext"></p>
                 </div>
                 <input type="hidden" id="partno" name="partno" value="**EMPTY**">
-                <div>
+                <div id="lastone">
                     <label for="desc"></label>
                     <input type="text" placeholder="Description" id="desc" name="desc" value=""/>
                 </div>
@@ -28,7 +28,8 @@
     </div><!-- container -->
 
     <script> 
-        var usernamevalue="$$$USERNAME$$$";
+        var partnovalue="$$$PARTNO$$$";
+        var parttypevalue="$$$PARTTYPE$$$";
     </script>
 </body>
 </html>

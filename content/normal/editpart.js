@@ -1,7 +1,6 @@
 function getOneUser() {
-    $.getJSON('/users/partinfo?partno=' + partno, (data) => {
-        $('#partnotext').html('<b>Part Number: ' + data.partno + '</b>') ;
-        $('#desc').val(data.desc) ;
+    $.getJSON('/robots/partinfo?partno=' + partnovalue, (data) => {
+        $('#partnotext').html('<b>' + data.key + ', ' + data.ntype + '</b>');
     }) ;
 }
 
