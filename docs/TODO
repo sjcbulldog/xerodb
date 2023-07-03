@@ -1,12 +1,10 @@
-General
-- common database
-
 Users
-- varied roles (useradmin, robotadmin, inventoryadmin)
+-----
+- Varied roles, not just normal and admin
 
-Robots
-- Robot service
-- New Robot
+Robot
+-----
+- Insert new robot part from part view (menu?)
 
 Inventory
-- Inventory service
+---------

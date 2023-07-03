@@ -7,7 +7,7 @@ import path from 'path';
 import { isLoggedIn, isAdmin } from './auth';
 import { XeroDBConfig } from './config';
 import { User } from './User';
-import { createMessageHtml } from './pagegen';
+import { createMessageHtml, processPage } from './pagegen';
 import https from 'https';
 import fs from 'fs';
 import { RobotService } from './RobotService';

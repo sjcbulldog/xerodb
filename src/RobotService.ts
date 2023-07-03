@@ -217,7 +217,19 @@ export class RobotService {
 
     private now() : string {
         let d: Date = new Date() ;
-        return d.toISOString();
+        return d.toLocaleString();
+    }
+
+    private async updateRobotModified(robot: number) {
+        let sql: string = 'UPDATE robots SET ';
+        sql += 'modified = "' + this.now() + '" ';
+        sql += 'WHERE key="' + String(robot) + '"';
+        this.db_.exec(sql, (err) => {
+            if (err) {
+                xeroDBLoggerLog('ERROR', 'RobotService: failed to update robot modified time, robot = "' + String(robot) + '" - ' + err) ;
+                xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"') ;                
+            }
+        });
     }
 
     private async createNewPart(parent: number, robot: number, partno: number, type: string, desc: string, user: string, attribs: Map<string, string>) : Promise<void> {
@@ -247,6 +259,7 @@ export class RobotService {
                         let partnostr: string = this.partnoString(robot, partno) ;
                         this.users_.notify('part-added', 'A new part, number "' + partnostr + '" was added by "' + user + '"');
                         xeroDBLoggerLog('INFO', 'UserService: added part "' + this.partnoString(robot, partno) + '" to the database');
+                        this.updateRobotModified(robot);
                         resolve() ;
                     }
                 });
@@ -372,6 +385,7 @@ export class RobotService {
         ret['ntype'] = ntype ;
         ret['desc'] = part.description_ ;
         ret['creator'] = part.username_ ;
+        ret['modified'] = part.modified_ ;
 
         if (part.type_ === RobotService.partTypeAssembly) {
             ret['folder'] = true ;
@@ -545,11 +559,22 @@ export class RobotService {
             return ;
         }
 
-        let parent: number = parseInt(req.query.parent, 10);
-        let robot: number = parseInt(req.query.robot, 10);
-        let type: string = req.query.type ;
-        let attribs: Map<string, string> = new Map<string, string>() ;
+        let nums: number[] = this.stringToPartno(req.query.parent) ;
+        if (nums.length !== 2) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/newpart'));
+            return ;
+        }
 
+        if (req.query.type !== 'A' && req.query.type != 'C' && req.query.type != 'M') {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/newpart'));
+            return ;
+        }
+
+        let parent: number = nums[1] ;
+        let robot: number = nums[0] ;
+        let type: string = req.query.type ;
+
+        let attribs: Map<string, string> = new Map<string, string>() ;
         let newpartno: number = this.nextpart_.get(robot)!
         this.nextpart_.set(robot, newpartno + 1) ;
         await this.createNewPart(parent, robot, newpartno, type, 'New Robot Part', u.username_, attribs);
@@ -583,6 +608,8 @@ export class RobotService {
 
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         xeroDBLoggerLog('DEBUG',"RobotService: rest api '" + req.path + "'");
+
+        console.log(this.now());
 
         let u: User | null = this.users_.userFromRequest(req);
         if (u === null) {

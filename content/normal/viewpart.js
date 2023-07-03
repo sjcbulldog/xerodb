@@ -1,5 +1,7 @@
+var parttree = null ;
+
 document.addEventListener("DOMContentLoaded", (event) => {
-  new mar10.Wunderbaum({
+  parttree = new mar10.Wunderbaum({
     id: "demo",
     element: document.getElementById("parttree"),
     source:  {
@@ -35,3 +37,17 @@ document.addEventListener("DOMContentLoaded", (event) => {
     }
   });
 }) ;
+
+document.onkeydown = function (e) {
+  if (parttree.activeNode.key) {
+    if (e.key === 'c' || e.key === 'C') {
+      window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=C" ;
+    }
+    else if (e.key === 'a' || e.key === 'A') {
+      window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=A" ;
+    }
+    if (e.key === 'm' || e.key === 'M') {
+      window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=M" ;
+    }
+  }
+}

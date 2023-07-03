@@ -7,6 +7,7 @@ function showAllUsers() {
         content += '<td><b>Description</b></td>' ;
         content += '<td><b>Created By</b></td>' ;
         content += '<td><b>Created</b></td>'
+        content += '<td><b>Last Modified</b></td>'
         content += '</tr>' ;
 
         for(let robot of data) {
@@ -17,6 +18,7 @@ function showAllUsers() {
             content += '<td>' + robot.description + '</td>' ;
             content += '<td>' + robot.creator + '</td>' ;
             content += '<td>' + robot.created + '</td>' ;
+            content += '<td>' + robot.modified + '</td>' ;
             content += '</tr>'
         }
         content += '</table>';
