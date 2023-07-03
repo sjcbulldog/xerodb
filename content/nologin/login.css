@@ -120,6 +120,7 @@ form:after {
 	z-index: -2;
 }
 #content form { margin: 0 20px; position: relative }
+#content form input[type="number"],
 #content form input[type="text"],
 #content form input[type="email"],
 #content form select,

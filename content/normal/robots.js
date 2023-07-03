@@ -12,13 +12,12 @@ function showAllUsers() {
 
         for(let robot of data) {
             content += '<tr>'
-            content += '<td>' ;
-            content += '<a title="Edit Robot" href=/robots/edit?robot='+ robot.name + '>' + robot.name + '</td>' ;
+            content += '<td>' + robot.name + '</td>' ;
             content += '<td><a title="View Robot" href=/robots/viewpart?partno=' + robot.part + '>' + robot.part + '</td>' ;
             content += '<td>' + robot.description + '</td>' ;
             content += '<td>' + robot.creator + '</td>' ;
             content += '<td>' + robot.created + '</td>' ;
-            content += '<td>' + robot.modified + '</td>' ;
+            content += '<td>' + robot.modified + '</td>'
             content += '</tr>'
         }
         content += '</table>';

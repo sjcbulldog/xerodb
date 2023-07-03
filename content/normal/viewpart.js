@@ -10,8 +10,9 @@ document.addEventListener("DOMContentLoaded", (event) => {
     columns: [
       { id: "*", title: "Part Number", width: "200px" },
       { id: "ntype", title: "Type", width: "120px" },
-      { id: "desc", title: "Description", width: "460px" },
-      { id: "creator", title: "Created By", width: "180px" },
+      { id: "quantity", title: "Quantity", width: "120px" },
+      { id: "desc", title: "Description", width: "420px" },
+      { id: "creator", title: "Created By", width: "140px" },
     ],
     load: function(e) {
       e.tree.expandAll() ;

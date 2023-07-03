@@ -9,15 +9,19 @@
 <body>
     <div class="container">
         <section id="content">
-            <form method="post" action="/users/editonedone" enctype="application/x-www-form-urlencoded">
+            <form method="post" action="/robots/editpartdone" enctype="application/x-www-form-urlencoded">
                 <h1>Edit Part</h1>
                 <div>
                     <p id="partnotext"></p>
                 </div>
                 <input type="hidden" id="partno" name="partno" value="**EMPTY**">
+                <div>
+                    <label for="desc">Description</label>
+                    <input type="text" required=true placeholder="Description" id="desc" name="desc" value=""/>
+                </div>
                 <div id="lastone">
-                    <label for="desc"></label>
-                    <input type="text" placeholder="Description" id="desc" name="desc" value=""/>
+                    <label for="quantity">Quantity</label>
+                    <input type="number" required=true min="1" max="100" placeholder="Quantity" id="quantity" name="quantity" value=""/>
                 </div>
                 <div>
                     <input type="submit" value="Update" />

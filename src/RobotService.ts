@@ -6,6 +6,7 @@ import { createMessageHtml, processPage } from './pagegen';
 import { UserService } from './UserService';
 import { User } from './User';
 import { xeroDBLoggerLog } from './logger';
+import { PartAttr } from './PartAttr';
 
 //
 // Part numbers
@@ -29,6 +30,23 @@ export class RobotService {
 
     private static readonly robotNumberLength: number = 3 ;
     private static readonly partNumberLength: number = 4 ;
+
+    private static readonly COTSAttributes = [
+        new PartAttr('Vendor Name', PartAttr.TypeStringName, true, ''),
+        new PartAttr('Vendor Site', PartAttr.TypeStringName, true, ''),
+        new PartAttr('Vendor Part Number', PartAttr.TypeStringName, false, ''),
+        new PartAttr('Cost', PartAttr.TypeDoubleName, false, '0.0'),
+    ] ;
+
+    private static readonly AssemblyAttributes = [
+        new PartAttr('Design Student', PartAttr.TypeStringName, false, ''),
+        new PartAttr('Design Mentor', PartAttr.TypeStringName, false, ''),
+    ] ;
+
+    private static readonly ManufacturedAttributes = [
+        new PartAttr('Design Student', PartAttr.TypeStringName, false, ''),
+        new PartAttr('Design Mentor', PartAttr.TypeStringName, false, ''),
+    ] ;
 
     nextkey_ : number ;
     dbpath_ : string ;
@@ -90,6 +108,7 @@ export class RobotService {
             parent int not null,
             robotid int not null,
             partno int not null,
+            quantity int not null,
             desc text not null,
             type text not null,
             username text not null,
@@ -135,12 +154,38 @@ export class RobotService {
         });        
     }
 
-    private attribMapToArray(attribs: Map<string, string>) {
+    private escapeString(str: string) : string {
+        return str.replace(/\'/g,"''");
+    }
+
+    private getPartAttrDescFromSet(descs: PartAttr[], key: string) : PartAttr | null {
+        for(let desc of descs) {
+            if (desc.name_ === key)
+                return desc ;
+        }
+
+        return null;
+    }
+
+    private getPartAttrDesc(descs: PartAttr[], key: string) : LooseObject {
+        let ret: LooseObject = {} ;
+        let desc: PartAttr | null = this.getPartAttrDescFromSet(descs, key);
+        if (desc !== null) {
+            ret['name'] = desc.name_ ;
+            ret['required'] = desc.required_ ;
+            ret['type'] = desc.type_;
+        }
+
+        return ret;
+    }
+
+    private attribMapToArray(attribs: Map<string, string>, descs: PartAttr[]) {
         let ret: LooseObject[] = [] ;
         for(let [key, value] of attribs) {
             let lobj: LooseObject = {} ;
             lobj['key'] = key ;
             lobj['value'] = value ;
+            lobj['desc'] = this.getPartAttrDesc(descs, key);
             ret.push(lobj);
         }
 
@@ -153,9 +198,13 @@ export class RobotService {
             if (str.length > 0) {
                 str += "," ;
             }
-            str += '"' ;
-            str += value ;
-            str += '"' ;
+            str += "'" ;
+            str += key ;
+            str += "'" ;
+            str += '=' ;
+            str += "'" ;
+            str += this.escapeString(value) ;
+            str += "'" ;
         }
         return str ;
     }
@@ -163,32 +212,52 @@ export class RobotService {
     private stringToAttribMap(attribs: string) {
         let ret: Map<string, string> = new Map<string, string>();
         let index: number = 0 ;
+        let ch: string ;
 
         while (index < attribs.length) {
             //
             // Parse the key, all letters, numbers, and underscore
             //
             let key: string = "" ;
-            while (index < attribs.length) {
-                let ch = attribs.charAt(index);
-                if (RobotService.lettersString.indexOf(ch) === -1 && RobotService.numbersString.indexOf(ch) === -1 && ch !== '_') {
-                    break ;
-                }
 
+            //
+            // Get and skip the leading quote in the key
+            //
+            ch = attribs.charAt(index) ;
+            if (ch != "'")
+                break; 
+            index++ ;
+
+            while (index < attribs.length && attribs.charAt(index) !== "'") {
+                let ch = attribs.charAt(index);
                 key += ch ;
                 index++ ;
             }
+
+            //
+            // If we are not at the end of the string, skip the trailing
+            // quote in the key
+            //
+            if (index === attribs.length)
+                break ;
+            index++ ;
 
             if (index === attribs.length) {
                 break ;
             }
 
+            //
+            // Check for an skip the equals sign between the key and the value
+            //
             if (attribs.charAt(index) !== '=') {
                 break ;
             }
             index++ ;
 
-            if (attribs.charAt(index) !== '"') {
+            //
+            // Get and skip the leading quote in the value
+            //
+            if (attribs.charAt(index) !== "'") {
                 break ;
             }
             index++ ;
@@ -196,20 +265,39 @@ export class RobotService {
             let value: string = "" ;
             while (index < attribs.length) {
                 let ch = attribs.charAt(index);
-                if (ch === '"') {
-                    break ;
+                if (ch === "'") {
+                    if (index < attribs.length - 1 && attribs.charAt(index + 1) === "'") {
+                        value += "'" ;
+                        index += 2 ;
+                    }
+                    else {
+                        break ;
+                    }
                 }
-
-                value += ch ;
-                index++ ;
+                else {
+                    value += ch ;
+                    index++ ;
+                }
             }
+
+            ret.set(key, value);
 
             if (index === attribs.length)
                 break ;
 
+            // Skip the trailing quote of the value
             index++;
 
-            ret.set(key, value);
+            if (index === attribs.length)
+                break ;
+
+            //
+            // Skip the comma separating the name value pairs in the string
+            //
+            ch = attribs.charAt(index) ;
+            if (ch != ',')
+                break; 
+            index++ ;
         }
 
         return ret;
@@ -233,15 +321,45 @@ export class RobotService {
     }
 
     private async updateRobotModified(robot: number) {
-        let sql: string = 'UPDATE robots SET ';
-        sql += 'modified = "' + this.now() + '" ';
-        sql += 'WHERE key="' + String(robot) + '"';
+        let sql: string = 'UPDATE robots SET';
+        sql += " modified = '" + this.now() + "'";
+        sql += " WHERE key=" + String(robot);
         this.db_.exec(sql, (err) => {
             if (err) {
                 xeroDBLoggerLog('ERROR', 'RobotService: failed to update robot modified time, robot = "' + String(robot) + '" - ' + err) ;
                 xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"') ;                
             }
         });
+    }
+
+    private async updatePart(part: RobotPart) : Promise<void> {
+        let sql: string = 'UPDATE parts SET';
+        sql += " desc='" + part.description_ + "',";
+        sql += " quantity=" + String(part.quantity_) + "," ;
+        sql += " attribs='" + this.escapeString(this.attribMapToString(part.attribs_)) + "'" ;
+        sql += ' WHERE robotid=' + String(part.robot_);
+        sql += ' AND partno=' + String(part.part_);
+
+        let ret: Promise<void> = new Promise<void>((resolve, reject) => {
+            try {
+                this.db_.exec(sql, (err) => {
+                    if (err) {
+                        xeroDBLoggerLog('ERROR', 'RobotService: failed update to part "' + this.partnoString(part.robot_, part.part_) + '" - ' + err) ;
+                        xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"') ;
+                        reject(err);
+                    }
+                    else {
+                        this.updateRobotModified(part.robot_);
+                        resolve() ;
+                    }
+                });
+            }
+            catch(err) {
+                xeroDBLoggerLog('ERROR', 'createNewPart - sql threw exception');
+            }
+        }); 
+
+        return ret;
     }
 
     private async createNewPart(parent: number, robot: number, partno: number, type: string, desc: string, user: string, attribs: Map<string, string>) : Promise<void> {
@@ -251,13 +369,14 @@ export class RobotService {
         let sql = 'INSERT INTO parts VALUES (' ;
         sql += String(parent) + "," ;
         sql += String(robot) + "," ;
-        sql += String(partno) + ","
-        sql += '"' + desc + '",' ;
-        sql += '"' + type + '",' ;
-        sql += '"' + user + '",' ;
-        sql += '"' + this.now() + '",' ;
-        sql += '"' + this.now() + '",' ;
-        sql += "'" + this.attribMapToString(attribs) + "');" ;
+        sql += String(partno) + ",";
+        sql += String(1) + ",";
+        sql += "'" + this.escapeString(desc) + "'," ;
+        sql += "'" + type + "'," ;
+        sql += "'" + user + "'," ;
+        sql += "'" + this.now() + "'," ;
+        sql += "'" + this.now() + "'," ;
+        sql += "'" + this.escapeString(this.attribMapToString(attribs)) + "')" ;
 
         let ret: Promise<void> = new Promise<void>((resolve, reject) => {
             try {
@@ -284,43 +403,81 @@ export class RobotService {
         return ret;
     }
 
+    private getAttributes(part: RobotPart) : PartAttr[] {
+        let ret: PartAttr[] = [] ;
+
+        if (part.type_ === RobotService.partTypeAssembly) {
+            ret = RobotService.AssemblyAttributes ;
+        }
+        else if (part.type_ === RobotService.partTypeCOTS) {
+            ret = RobotService.COTSAttributes ;
+        }
+        else if (part.type_ === RobotService.partTypeManufactured) {
+            ret = RobotService.ManufacturedAttributes;
+        }
+
+        return ret;
+    }
+
+    private applyAttributes(part: RobotPart) {
+        let attribs: PartAttr[] = this.getAttributes(part);
+
+        for(let attr of attribs) {
+            if (!part.attribs_.has(attr.name_)) {
+                //
+                // The part is missing the attribute, add a default value
+                //
+                part.attribs_.set(attr.name_, attr.default_);
+            }
+        }
+    }
+
+    private extractPartFromRow(robot: number, row: unknown) : RobotPart {
+        let obj: Object = row as Object;
+        type ObjectKey = keyof typeof obj;
+        const parentKey = 'parent' as ObjectKey;
+        const partnoKey = 'partno' as ObjectKey;
+        const quantityKey = 'quantity' as ObjectKey ;
+        const descKey = 'desc' as ObjectKey;
+        const typeKey = 'type' as ObjectKey;
+        const usernameKey = 'username' as ObjectKey ;
+        const createdKey = 'created' as ObjectKey ;
+        const modifiedKey = 'modified' as ObjectKey ;
+        const attribsKey = 'attribs' as ObjectKey;
+
+        let parent = (obj[parentKey] as unknown) as number;
+        let partno = (obj[partnoKey] as unknown) as number ;
+        let quantity = (obj[quantityKey] as unknown) as number ;
+        let desc = (obj[descKey] as unknown) as string ;
+        let type = (obj[typeKey] as unknown) as string ;
+        let username = (obj[usernameKey] as unknown) as string ;
+        let created = (obj[createdKey] as unknown) as string ;
+        let modified = (obj[modifiedKey] as unknown) as string ;
+        let attribs = (obj[attribsKey] as unknown) as string ;
+
+        let attrlist : Map<string, string> ;
+        if (attribs === undefined) {
+            attrlist = new Map<string, string>() ;
+        } else {
+            attrlist = this.stringToAttribMap(attribs);
+        }
+
+        let retval: RobotPart = new RobotPart(parent, robot, partno, quantity, desc, type, username, created, modified, attrlist);
+        this.applyAttributes(retval);
+
+        return retval ;
+    }
+
     private async getOnePart(robot: number, partno: number) : Promise<RobotPart> {
         let ret: Promise<RobotPart> = new Promise<RobotPart>((resolve, reject) => {
             let retval: RobotPart ;
-            let sql = 'select robotid, parent, partno, desc, type, username from parts where robotid=' + String(robot) + ' AND partno=' + String(partno);
+            let sql = 'select parent, partno, quantity, desc, type, username, created, modified, attribs from parts where robotid=' + String(robot) + ' AND partno=' + String(partno);
             this.db_.all(sql, async (err, rows) => {
                 if (rows.length === 0) {
                     reject(new Error('no such record found'));
                 }
                 for(let row of rows) {
-                    let obj: Object = row as Object;
-                    type ObjectKey = keyof typeof obj;
-                    const parentKey = 'parent' as ObjectKey;
-                    const partnoKey = 'partno' as ObjectKey;
-                    const descKey = 'desc' as ObjectKey;
-                    const typeKey = 'type' as ObjectKey;
-                    const usernameKey = 'username' as ObjectKey ;
-                    const createdKey = 'created' as ObjectKey ;
-                    const modifiedKey = 'modified' as ObjectKey ;
-                    const attribsKey = 'attribs' as ObjectKey;
-
-                    let parent = (obj[parentKey] as unknown) as number;
-                    let partno = (obj[partnoKey] as unknown) as number ;
-                    let desc = (obj[descKey] as unknown) as string ;
-                    let type = (obj[typeKey] as unknown) as string ;
-                    let username = (obj[usernameKey] as unknown) as string ;
-                    let created = (obj[createdKey] as unknown) as string ;
-                    let modified = (obj[modifiedKey] as unknown) as string ;
-                    let attribs = (obj[attribsKey] as unknown) as string ;
-
-                    let attrlist : Map<string, string> ;
-                    if (attribs === undefined) {
-                        attrlist = new Map<string, string>() ;
-                    } else {
-                        attrlist = this.stringToAttribMap(attribs);
-                    }
-
-                    retval = new RobotPart(parent, robot, partno, desc, type, username, created, modified, attrlist);
+                    retval = this.extractPartFromRow(robot, row);
                     break ;
                 }
                 resolve(retval) ;
@@ -333,49 +490,27 @@ export class RobotService {
     private async getPartsForRobot(robot: number) : Promise<RobotPart[]> {
         let ret: Promise<RobotPart[]> = new Promise<RobotPart[]>((resolve, reject) => {
             let retval: RobotPart[] = [] ;
-            let sql = 'select robotid, parent, partno, desc, type, username from parts where robotid=' + String(robot) + ';' ;
+            let sql = 'select parent, partno, quantity, desc, type, username, created, modified, attribs from parts where robotid=' + String(robot) + ';' ;
             this.db_.all(sql, async (err, rows) => {
-                let maxpart: number = 0 ;
-                for(let row of rows) {
-                    let obj: Object = row as Object;
-                    type ObjectKey = keyof typeof obj;
-                    const parentKey = 'parent' as ObjectKey;
-                    const partnoKey = 'partno' as ObjectKey;
-                    const descKey = 'desc' as ObjectKey;
-                    const typeKey = 'type' as ObjectKey;
-                    const usernameKey = 'username' as ObjectKey ;
-                    const createdKey = 'created' as ObjectKey ;
-                    const modifiedKey = 'modified' as ObjectKey ;
-                    const attribsKey = 'attribs' as ObjectKey;
-
-                    let parent = (obj[parentKey] as unknown) as number;
-                    let partno = (obj[partnoKey] as unknown) as number ;
-                    let desc = (obj[descKey] as unknown) as string ;
-                    let type = (obj[typeKey] as unknown) as string ;
-                    let username = (obj[usernameKey] as unknown) as string ;
-                    let created = (obj[createdKey] as unknown) as string ;
-                    let modified = (obj[modifiedKey] as unknown) as string ;
-                    let attribs = (obj[attribsKey] as unknown) as string ;
-
-                    if (partno > maxpart) {
-                        maxpart = partno ;
-                    }
-
-                    let attrlist : Map<string, string> ;
-                    if (attribs === undefined) {
-                        attrlist = new Map<string, string>() ;
-                    } else {
-                        attrlist = this.stringToAttribMap(attribs);
-                    }
-
-                    let partobj: RobotPart = new RobotPart(parent, robot, partno, desc, type, username, created, modified, attrlist);
-
-                    retval.push(partobj);
+                if (err) {
+                    resolve([]);
                 }
+                else {
+                    let maxpart: number = 0 ;
+                    for(let row of rows) {
+                        let partobj: RobotPart = this.extractPartFromRow(robot, row);
+                        if (partobj !== null) {
+                            if (partobj.part_ > maxpart) {
+                                maxpart = partobj.part_ ;
+                            }
+                            retval.push(partobj);
+                        }
+                    }
 
-                maxpart++ ;
-                this.nextpart_.set(robot, maxpart);
-                resolve(retval) ;
+                    maxpart++ ;
+                    this.nextpart_.set(robot, maxpart);
+                    resolve(retval) ;
+                }
             });
         }) ;
         return ret ;
@@ -444,7 +579,8 @@ export class RobotService {
         ret['desc'] = part.description_ ;
         ret['creator'] = part.username_ ;
         ret['modified'] = part.modified_ ;
-        ret['attribs'] = this.attribMapToArray(part.attribs_);
+        ret['quantity'] = part.quantity_;
+        ret['attribs'] = this.attribMapToArray(part.attribs_, this.getAttributes(part));
 
         if (part.type_ === RobotService.partTypeAssembly) {
             ret['folder'] = true ;
@@ -470,13 +606,13 @@ export class RobotService {
         parent['children'].push(child);
     }
 
-    private addChildren(obj: LooseObject, parent: number, parts: RobotPart[]) {
+    private addChildren(obj: LooseObject, parent: number, parts: RobotPart[], depth: number) {
         for(let part of parts) {
             if (part.parent_ === parent) {
                 let child: LooseObject = this.partToLoose(part);
                 this.appendChild(obj, child);
-                if (part.type_ === RobotService.partTypeAssembly) {
-                    this.addChildren(child, part.part_, parts);
+                if (part.type_ === RobotService.partTypeAssembly && depth < 100) {
+                    this.addChildren(child, part.part_, parts, depth + 1);
                 }
             }
         }
@@ -489,7 +625,7 @@ export class RobotService {
         if (toppart !== null) {
             let top: LooseObject = this.partToLoose(toppart);
             ret.push(top);
-            this.addChildren(top, id, parts);
+            this.addChildren(top, id, parts, 1);
         }
 
         return ret ;
@@ -536,7 +672,7 @@ export class RobotService {
             }
         }) ;        
 
-        res.redirect('/menu') ;
+        res.redirect('/normal/robots.html') ;
     }
 
     private async listall(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>)  {
@@ -594,8 +730,16 @@ export class RobotService {
 
         this.getPartsForRobot(partno[0])
             .then((partobjs) => {
-                let result = this.partsToTree(partno[1], partobjs) ;
-                res.json(result) ;
+                let result : LooseObject[] ;
+                
+                try {
+                    result = this.partsToTree(partno[1], partobjs) ;
+                    res.json(result) ;
+                }
+                catch(err) {
+                    res.json([]) ;
+                }
+
             })
             .catch((err) => {
 
@@ -663,6 +807,40 @@ export class RobotService {
         let vars:Map<string, string> = new Map<string, string>() ;
         vars.set('$$$PARTNO$$$', req.query.partno);
         res.send(processPage(vars, '/normal/editpart.html'));
+    }
+
+    private async editpartdone(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        if (req.body.partno === undefined) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/editpartdone'));
+            return ;
+        }
+
+        let partno: number[] = this.stringToPartno(req.body.partno) ;
+        if (partno.length !== 2) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/editpartdone'));
+            return ;
+        }
+
+        let part: RobotPart = await this.getOnePart(partno[0], partno[1]);
+        if (part === null) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/editpartdone'));
+            return ;
+        }
+
+        part.description_ = req.body.desc ;
+        part.quantity_ = req.body.quantity ;
+
+        for(let attr of this.getAttributes(part)) {
+            let val = req.body[attr.name_] ;
+            if (val) {
+                part.attribs_.set(attr.name_, val);
+            }
+        }
+
+        this.updatePart(part) ;
+
+        let url: string = '/robots/viewpart?partno=' + this.partnoString(part.robot_, 1);
+        res.redirect(url) ;
     }
 
     private async deletepart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
@@ -778,6 +956,10 @@ export class RobotService {
         }
         else if (req.path === '/robots/editpart') {
             this.editpart(u, req, res);
+            handled = true ;
+        }
+        else if (req.path === '/robots/editpartdone') {
+            this.editpartdone(u, req, res);
             handled = true ;
         }
         else if (req.path === '/robots/deletepart') {
