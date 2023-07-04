@@ -13,14 +13,17 @@ import fs from 'fs';
 import { RobotService } from './RobotService';
 import * as FileStreamRotator from 'file-stream-rotator';
 import { xeroDBLoggerInit, xeroDBLoggerLog } from './logger';
+import { AuditService } from './AuditService';
 
 const nologinName: string = "/nologin/*";
 const adminName: string = "/admin/*";
 const normalName: string = "/normal/*";
 
 const config: XeroDBConfig = XeroDBConfig.getXeroDBConfig();
-const usersrv: UserService = new UserService(config.dataDir());
-const robotsrv: RobotService = new RobotService(usersrv, config.dataDir());
+const auditsrv: AuditService = new AuditService(config.dataDir());
+const usersrv: UserService = new UserService(config.dataDir(), auditsrv);
+const robotsrv: RobotService = new RobotService(config.dataDir(),usersrv, auditsrv);
+
 const app: Express = express();
 
 var logStream = FileStreamRotator.getStream({

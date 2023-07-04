@@ -10,6 +10,7 @@ export class User {
     state_ : string ;
     roles_ : string[];
     cookie_ : string ;
+    ipaddr_ : string ;
 
     constructor(id: number, username: string, password: string, lastname: string, firstname: string, email: string, state: string, roles: string[]) {
         this.id_ = id ;
@@ -21,6 +22,7 @@ export class User {
         this.state_ = state ;
         this.roles_ = roles;
         this.cookie_ = "" ;
+        this.ipaddr_ = "" ;
     }
 
     public isAdmin() : boolean {

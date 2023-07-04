@@ -7,6 +7,8 @@ import { UserService } from './UserService';
 import { User } from './User';
 import { xeroDBLoggerLog } from './logger';
 import { PartAttr } from './PartAttr';
+import { DatabaseService } from './DatabaseService';
+import { AuditService } from './AuditService';
 
 //
 // Part numbers
@@ -19,9 +21,8 @@ interface LooseObject {
     [key: string]: any
 };
 
-export class RobotService {
+export class RobotService extends DatabaseService {
     private static readonly robotFileName: string = 'robot.db';
-    private static readonly missingErrorMessage: string = 'SQLITE_CANTOPEN';
     private static readonly lettersString: string = 'abcdefghijklmnopqrstuvwxzyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
     private static readonly numbersString: string = '0123456789';
     private static readonly partTypeCOTS: string = 'C';
@@ -49,48 +50,24 @@ export class RobotService {
     ];
 
     nextkey_: number;
-    dbpath_: string;
-    db_: sqlite3.Database;
     robots_: Map<number, Robot>;
-    users_: UserService;
     nextpart_: Map<number, number>;
+    users_: UserService;
+    audit_: AuditService;
 
-    constructor(users: UserService, rootdir: string) {
+    constructor(rootdir: string, users: UserService, audit: AuditService) {
+        super('RobotService', path.join(rootdir, RobotService.robotFileName));
+
         this.users_ = users;
+        this.audit_ = audit ;
         this.nextkey_ = 1;
         this.robots_ = new Map<number, Robot>();
         this.nextpart_ = new Map<number, number>();
-        this.dbpath_ = path.join(rootdir, RobotService.robotFileName);
 
-        this.db_ = new sqlite3.Database(this.dbpath_, sqlite3.OPEN_READWRITE, (err) => {
-            if (err) {
-                if (err.message.startsWith(RobotService.missingErrorMessage)) {
-                    this.createDatabaseAndTables();
-                    return;
-                }
-                else {
-                    throw new Error('UserService: error opening sqlite database');
-                }
-            }
-            else {
-                this.loadAll();
-            }
-        });
+        this.loadAll() ;
     }
 
-    private createDatabaseAndTables() {
-        xeroDBLoggerLog('INFO', 'RobotService: creating new database at path "' + this.dbpath_ + '"');
-        this.db_ = new sqlite3.Database(this.dbpath_, (err) => {
-            if (err) {
-                throw new Error('RobotService: error creating sqlite database - ' + err.message);
-            }
-            else {
-                this.createTables();
-            }
-        });
-    }
-
-    private createTables() {
+    protected createTables() {
         let sql =
             `CREATE TABLE robots (
                 id int primary key not null,
@@ -101,7 +78,7 @@ export class RobotService {
                 modified text not null,
                 part text not null);
             ` ;
-        this.db_.exec(sql);
+        this.db().exec(sql);
 
         sql =
             `CREATE TABLE parts (
@@ -117,7 +94,7 @@ export class RobotService {
             attribs text);
         ` ;
 
-        this.db_.exec(sql)
+        this.db().exec(sql)
     }
 
     private loadAll() {
@@ -125,7 +102,7 @@ export class RobotService {
             `
             select id, name, desc, username, created, modified, part from robots;
             `;
-        this.db_.all(sql, (err, rows) => {
+        this.db().all(sql, (err, rows) => {
             rows.forEach(row => {
                 let obj: Object = row as Object;
                 type ObjectKey = keyof typeof obj;
@@ -154,9 +131,6 @@ export class RobotService {
         });
     }
 
-    private escapeString(str: string): string {
-        return str.replace(/\'/g, "''");
-    }
 
     private getPartAttrDescFromSet(descs: PartAttr[], key: string): PartAttr | null {
         for (let desc of descs) {
@@ -303,28 +277,11 @@ export class RobotService {
         return ret;
     }
 
-    private assertAttribsValid(attribs: Map<string, string>) {
-        for (let [key, value] of attribs) {
-            if (/^[a-zA-Z][a-zA-Z_0-9]*$/.test(key) === false) {
-                throw new Error('part attributes invalid - key "' + key + '" contains an invalid character');
-            }
-
-            if (value.indexOf('"') !== -1 || value.indexOf("'") !== -1) {
-                throw new Error('part attributes invalid - value "' + value + '" contains a quote character');
-            }
-        }
-    }
-
-    private now(): string {
-        let d: Date = new Date();
-        return d.toLocaleString();
-    }
-
     private async updateRobotModified(robot: number) {
         let sql: string = 'UPDATE robots SET';
         sql += " modified = '" + this.now() + "'";
         sql += " WHERE key=" + String(robot);
-        this.db_.exec(sql, (err) => {
+        this.db().exec(sql, (err) => {
             if (err) {
                 xeroDBLoggerLog('ERROR', 'RobotService: failed to update robot modified time, robot = "' + String(robot) + '" - ' + err);
                 xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
@@ -332,7 +289,7 @@ export class RobotService {
         });
     }
 
-    private async updatePart(part: RobotPart): Promise<void> {
+    private async updatePart(u: User, part: RobotPart): Promise<void> {
         let sql: string = 'UPDATE parts SET';
         sql += " desc='" + part.description_ + "',";
         sql += " quantity=" + String(part.quantity_) + ",";
@@ -342,13 +299,14 @@ export class RobotService {
 
         let ret: Promise<void> = new Promise<void>((resolve, reject) => {
             try {
-                this.db_.exec(sql, (err) => {
+                this.db().exec(sql, (err) => {
                     if (err) {
                         xeroDBLoggerLog('ERROR', 'RobotService: failed update to part "' + this.partnoString(part.robot_, part.part_) + '" - ' + err);
                         xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
                         reject(err);
                     }
                     else {
+                        this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(part.robot_, part.part_), 'robot part modified');
                         this.updateRobotModified(part.robot_);
                         resolve();
                     }
@@ -362,9 +320,7 @@ export class RobotService {
         return ret;
     }
 
-    private async createNewPart(parent: number, robot: number, partno: number, type: string, desc: string, user: string, attribs: Map<string, string>): Promise<void> {
-
-        this.assertAttribsValid(attribs);
+    private async createNewPart(u: User, parent: number, robot: number, partno: number, type: string, desc: string, attribs: Map<string, string>): Promise<void> {
 
         let sql = 'INSERT INTO parts VALUES (';
         sql += String(parent) + ",";
@@ -373,24 +329,23 @@ export class RobotService {
         sql += String(1) + ",";
         sql += "'" + this.escapeString(desc) + "',";
         sql += "'" + type + "',";
-        sql += "'" + user + "',";
+        sql += "'" + u.username_ + "',";
         sql += "'" + this.now() + "',";
         sql += "'" + this.now() + "',";
         sql += "'" + this.escapeString(this.attribMapToString(attribs)) + "')";
 
         let ret: Promise<void> = new Promise<void>((resolve, reject) => {
             try {
-                this.db_.exec(sql, (err) => {
+                this.db().exec(sql, (err) => {
                     if (err) {
                         xeroDBLoggerLog('ERROR', 'RobotService: failed to add part "' + this.partnoString(robot, partno) + '" to the database - ' + err);
                         xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
                         reject(err);
                     }
                     else {
-                        let partnostr: string = this.partnoString(robot, partno);
-                        this.users_.notify('part-added', 'A new part, number "' + partnostr + '" was added by "' + user + '"');
                         xeroDBLoggerLog('INFO', 'UserService: added part "' + this.partnoString(robot, partno) + '" to the database');
                         this.updateRobotModified(robot);
+                        this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(robot, partno), 'created new robot part');
                         resolve();
                     }
                 });
@@ -472,7 +427,7 @@ export class RobotService {
         let ret: Promise<RobotPart> = new Promise<RobotPart>((resolve, reject) => {
             let retval: RobotPart;
             let sql = 'select parent, partno, quantity, desc, type, username, created, modified, attribs from parts where robotid=' + String(robot) + ' AND partno=' + String(partno);
-            this.db_.all(sql, async (err, rows) => {
+            this.db().all(sql, async (err, rows) => {
                 if (rows.length === 0) {
                     reject(new Error('no such record found'));
                 }
@@ -491,7 +446,7 @@ export class RobotService {
         let ret: Promise<RobotPart[]> = new Promise<RobotPart[]>((resolve, reject) => {
             let retval: RobotPart[] = [];
             let sql = 'select parent, partno, quantity, desc, type, username, created, modified, attribs from parts where robotid=' + String(robot) + ';';
-            this.db_.all(sql, async (err, rows) => {
+            this.db().all(sql, async (err, rows) => {
                 if (err) {
                     resolve([]);
                 }
@@ -642,7 +597,7 @@ export class RobotService {
         // First create a new part
         //
         let attribs: Map<string, string> = new Map<string, string>();
-        await this.createNewPart(-robotno, robotno, 1, RobotService.partTypeAssembly, req.body.desc, u.username_, attribs);
+        await this.createNewPart(u, -robotno, robotno, 1, RobotService.partTypeAssembly, req.body.desc, attribs);
 
         let current = this.now();
 
@@ -655,7 +610,7 @@ export class RobotService {
         sql += '"' + current + '",';
         sql += String(1) + ");"
 
-        await this.db_.exec(sql, (err) => {
+        await this.db().exec(sql, (err) => {
             if (err) {
                 xeroDBLoggerLog('ERROR', 'RobotService: failed to add robot "' + req.body.name + '" to the database - ' + err);
                 xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
@@ -669,6 +624,8 @@ export class RobotService {
                 this.users_.notify('robot-added', 'A new robot "' + req.body.name + '" was added by user "' + u.username_ + '"');
 
                 this.nextpart_.set(robotno, 2);
+
+                this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(robotno, 0), "created new robot'" + req.body.name + "', robot number " + robotno);
             }
         });
 
@@ -780,12 +737,11 @@ export class RobotService {
         let attribs: Map<string, string> = new Map<string, string>();
         let newpartno: number = this.nextpart_.get(robot)!
         this.nextpart_.set(robot, newpartno + 1);
-        await this.createNewPart(parent, robot, newpartno, type, 'Double Click To Edit', u.username_, attribs);
+        await this.createNewPart(u, parent, robot, newpartno, type, 'Double Click To Edit', attribs);
 
         let url: string = '/robots/viewpart?partno=' + this.partnoString(robot, 1);
         res.redirect(url);
     }
-
 
     private async editpart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         if (req.query.partno === undefined) {
@@ -837,7 +793,7 @@ export class RobotService {
             }
         }
 
-        this.updatePart(part);
+        this.updatePart(u, part);
 
         let url: string = '/robots/viewpart?partno=' + this.partnoString(part.robot_, 1);
         res.redirect(url);
@@ -859,7 +815,7 @@ export class RobotService {
         sql += 'parent = "0"';
         sql += ' WHERE robotid=' + String(partno[0]);
         sql += ' AND partno=' + String(partno[1]);
-        this.db_.exec(sql, (err) => {
+        this.db().exec(sql, (err) => {
             if (err) {
                 xeroDBLoggerLog('ERROR', 'RobotService: failed to update part (delete)time - ' + err.message);
                 xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
@@ -898,7 +854,7 @@ export class RobotService {
         sql += 'parent = ' + String(parentno[1]);
         sql += ' WHERE robotid=' + String(partno[0]);
         sql += ' AND partno=' + String(partno[1]);
-        this.db_.exec(sql, (err) => {
+        this.db().exec(sql, (err) => {
             if (err) {
                 xeroDBLoggerLog('ERROR', 'RobotService: failed to update part (delete)time - ' + err.message);
                 xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');

@@ -9,6 +9,8 @@ import { isAdmin, isLoggedIn } from './auth';
 import { sendEmail } from './mail';
 import { XeroDBConfig } from './config';
 import { xeroDBLoggerLog } from './logger';
+import { DatabaseService } from './DatabaseService';
+import { AuditService } from './AuditService';
 
 const config = XeroDBConfig.getXeroDBConfig();
 
@@ -16,9 +18,8 @@ interface LooseObject {
     [key: string]: any
 };
 
-export class UserService {
+export class UserService extends DatabaseService {
     private static readonly userFileName: string = 'user.db';
-    private static readonly missingErrorMessage: string = 'SQLITE_CANTOPEN';
     private static readonly confirmString: string = '/users/confirm';
     private static readonly userInfoString: string = '/users/userinfo';
     private static readonly lostPwdReturnString: string = '/users/lostpwdreturn';
@@ -35,29 +36,16 @@ export class UserService {
     public static readonly UserNotActiveError = "USER_SERVICE_USER_NOT_ACTIVE";
 
     nextkey_: number;
-    dbpath_: string;
-    db_: sqlite3.Database;
     users_: Map<string, User>;
+    audit_ : AuditService;
 
-    constructor(rootdir: string) {
+    constructor(rootdir: string, audit: AuditService) {
+        super('UserService', path.join(rootdir, UserService.userFileName)) ;
+        
+        this.audit_ = audit;
         this.nextkey_ = 0;
         this.users_ = new Map<string, User>();
-        this.dbpath_ = path.join(rootdir, UserService.userFileName);
-        this.db_ = new sqlite3.Database(this.dbpath_, sqlite3.OPEN_READWRITE, (err) => {
-            if (err) {
-                if (err.message.startsWith(UserService.missingErrorMessage)) {
-                    this.createDatabaseAndTables();
-                    return;
-                }
-                else {
-                    xeroDBLoggerLog('ERROR', 'UserService: error opening sqlite database');
-                    exit(1);
-                }
-            }
-            else {
-                this.loadUsers();
-            }
-        });
+        this.loadUsers();
     }
 
     private loadUsers() {
@@ -65,7 +53,7 @@ export class UserService {
             `
             select id, username, password, lastname, firstname, email, state, roles from users;
             `;
-        this.db_.all(sql, (err, rows) => {
+        this.db().all(sql, (err, rows) => {
             rows.forEach(row => {
                 let obj: Object = row as Object;
                 type ObjectKey = keyof typeof obj;
@@ -97,8 +85,6 @@ export class UserService {
         });
     }
 
-    public notify(activity: string, msg: string) {
-    }
 
     private allUsers(): Object {
         let ret: Object[] = [];
@@ -121,6 +107,7 @@ export class UserService {
         for (let [key, user] of this.users_) {
             if (user.isAdmin()) {
                 let msg: string = 'The user ' + u.username_ + ' has confirmed their account and is now pending.';
+                msg += '<br>Click <a href="' + config.url() + '"here</a> to log into the XeroDB site.'
                 sendEmail(user.email_, 'XeroDB: New User ' + u.username_ + ' pending', msg);
             }
         }
@@ -137,7 +124,7 @@ export class UserService {
 
         xeroDBLoggerLog('DEBUG', 'updateUser: ' + sql);
 
-        this.db_.exec(sql, (err) => {
+        this.db().exec(sql, (err) => {
             if (err) {
                 xeroDBLoggerLog('ERROR', 'UserService: failed to update user "' + u.username_ + '" to the database - ' + err);
                 xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
@@ -167,7 +154,7 @@ export class UserService {
     private confirmUser(token: string) {
         xeroDBLoggerLog('DEBUG', 'Confirming user token: ' + token);
         let sql = 'select token, username from confirm where token="' + token + '";';
-        this.db_.all(sql, (err, rows) => {
+        this.db().all(sql, (err, rows) => {
             rows.forEach(row => {
                 let obj: Object = row as Object;
                 type ObjectKey = keyof typeof obj;
@@ -184,7 +171,7 @@ export class UserService {
                 }
 
                 sql = 'delete from confirm where token="' + token + '";';
-                this.db_.exec(sql);
+                this.db().exec(sql);
 
                 this.notify('user-confirmed', 'the user "' + username + '" confirmed there email') ;
             });
@@ -194,10 +181,10 @@ export class UserService {
     private lostPasswordStage2(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         let token = req.path.substring(UserService.lostPwdReturnString.length + 1)
         let sql = 'select token, username from lostpwd where token="' + token + '";';
-        this.db_.all(sql, (err, rows) => {
+        this.db().all(sql, (err, rows) => {
             if (rows.length !== 1) {
                 sql = 'delete from lostpwd where token="' + token + '";';
-                this.db_.exec(sql);
+                this.db().exec(sql);
                 res.send(createMessageHtml('Internal Error', 'internal error with lost password request'));
             }
             else {
@@ -240,7 +227,7 @@ export class UserService {
             sql += 'password = "' + hashed + '" ';
             sql += 'WHERE username="' + u.username_ + '"';
 
-            this.db_.exec(sql, (err) => {
+            this.db().exec(sql, (err) => {
                 if (err) {
                     xeroDBLoggerLog('ERROR', 'UserService: failed to update user "' + u.username_ + '" to the database - ' + err);
                     xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
@@ -256,10 +243,10 @@ export class UserService {
 
     private async processNewPassword(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         let sql = 'select token, username from lostpwd where token="' + req.body.token + '";';
-        this.db_.all(sql, (err, rows) => {
+        this.db().all(sql, (err, rows) => {
             if (rows.length !== 1) {
                 sql = 'delete from lostpwd where token="' + req.body.token + '";';
-                this.db_.exec(sql);
+                this.db().exec(sql);
                 res.send(createMessageHtml('Internal Error', 'internal error with lost password request'));
             }
             else {
@@ -280,7 +267,7 @@ export class UserService {
                             sql += 'password = "' + hashed + '" ';
                             sql += 'WHERE username="' + u.username_ + '"';
 
-                            this.db_.exec(sql, (err) => {
+                            this.db().exec(sql, (err) => {
                                 if (err) {
                                     xeroDBLoggerLog('ERROR', 'UserService: failed to update user "' + u!.username_ + '" to the database - ' + err);
                                     xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
@@ -390,6 +377,222 @@ export class UserService {
         res.json(result);
     }
 
+
+    public userFromRequest(req: Request<{}, any, any, any, Record<string, any>>): User | null {
+        if (req.cookies.xeropartdb === undefined)
+            return null;
+
+        for (let [key, user] of this.users_) {
+            if (user.cookie_ === req.cookies.xeropartdb) {
+                return user;
+            }
+        }
+
+        return null;
+    }
+
+    public userFromCookie(cookie: string): User | null {
+        for (let [key, user] of this.users_) {
+            if (user.cookie_ === cookie) {
+                return user;
+            }
+        }
+
+        return null;
+    }
+
+    public userFromUserName(username: string): User | null {
+        for (let [key, user] of this.users_) {
+            if (user.username_ === username) {
+                return user;
+            }
+        }
+
+        return null;
+    }
+
+    public userFromEmail(email: string): User | null {
+        for (let [key, user] of this.users_) {
+            if (user.email_ === email) {
+                return user;
+            }
+        }
+
+        return null;
+    }
+
+    public canUserLogin(username: string, password: string): Error | User {
+        let ret: Error | User = new Error(UserService.UnknownUserError);
+
+        if (!this.users_.has(username)) {
+            ret = new Error(UserService.UnknownUserError);
+        }
+        else {
+            let u: User = this.users_.get(username)!;
+
+            let hashed: string = this.hashPassword(password);
+            if (hashed !== u.password_) {
+                ret = new Error(UserService.IncorrectPasswordError);
+            }
+            else {
+                ret = u;
+            }
+        }
+
+        return ret;
+    }
+
+    private sendLostPasswordEmail(u: User) {
+        let token: string = crypto.createHash('sha256').update(u.username_).digest('hex');
+        let msg: string = "";
+
+        //
+        // Delete any old lost password records for this user or token
+        //
+        let sql: string = 'delete from lostpwd where username="' + u.username_ + '";';
+        this.db().exec(sql);
+
+        sql = 'delete from lostpwd where token="' + token + '";';
+        this.db().exec(sql);
+
+        //
+        // Create one new record for this user
+        //
+        sql = 'INSERT into lostpwd VALUES (';
+        sql += '"' + token + '",';
+        sql += '"' + u.username_ + '");';
+
+        this.db().exec(sql, (err) => {
+            if (err) {
+                xeroDBLoggerLog('ERROR', 'UserService: failed to add user "' + u.username_ + '" to the lost password database - ' + err);
+                xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
+            }
+            else {
+                msg += 'Please click <a href="' + config.url() + '/users/lostpwdreturn/' + token + '"> here</a> to reset your password "' + u.username_ + "'";
+                sendEmail(u.email_, 'Lost XeroPartsDB Account Password', msg);
+            }
+        });
+    }
+
+    private sendConfirmationEmail(u: User) {
+        let cookie: string = crypto.createHash('sha256').update(u.username_).digest('hex');
+        let msg: string = "";
+
+        let sql = 'INSERT into confirm VALUES (';
+        sql += '"' + cookie + '",';
+        sql += '"' + u.username_ + '");';
+
+        this.db().exec(sql, (err) => {
+            if (err) {
+                xeroDBLoggerLog('ERROR', 'UserService: failed to add user "' + u.username_ + '" to the confirmation database - ' + err);
+                xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
+            }
+            else {
+                msg += 'Please click <a href="' + config.url() + '/users/confirm/' + cookie + '"> here</a> to confirm the user "' + u.username_ + "'";
+                sendEmail(u.email_, 'Confirm XeroPartsDB Account', msg);
+            }
+        });
+    }
+
+    private rolesToRolesString(roles: string[]): string {
+        let rolestr: string = "";
+        for (let role of roles) {
+            if (rolestr.length > 0) {
+                rolestr += ",";
+            }
+            rolestr += role;
+        }
+
+        return rolestr;
+    }
+
+    private roleStringtoRoles(rolesstr: string): string[] {
+        return rolesstr.split(',');
+    }
+
+    public addUser(username: string, password: string, lastname: string, firstname: string, email: string, state: string | null, roles: string[]): Error | null {
+        let ret: Error | null = null;
+
+        if (this.users_.has(username)) {
+            ret = new Error("duplicate username '" + username + "' requested");
+        }
+        else if (this.userFromEmail(email) !== null) {
+            ret = new Error("an account with the email '" + email + "' already exists");
+        }
+        else {
+            let rolestr: string = this.rolesToRolesString(roles);
+            password = this.hashPassword(password);
+
+            if (state === null) {
+                state = UserService.stateNew;
+            }
+
+            let sql = 'INSERT INTO users VALUES (';
+            sql += String(this.nextkey_) + ',';
+            sql += '"' + username + '",';
+            sql += '"' + password + '",';
+            sql += '"' + lastname + '",';
+            sql += '"' + firstname + '",';
+            sql += '"' + email + '",';
+            sql += '"' + state + '",';
+            sql += '"' + rolestr + '");';
+            this.db().exec(sql, (err) => {
+                if (err) {
+                    xeroDBLoggerLog('ERROR', 'UserService: failed to add user "' + username + '" to the database - ' + err);
+                    xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
+                }
+                else {
+                    let u: User = new User(this.nextkey_, username, password, lastname, firstname, email, state!, roles);
+                    this.users_.set(username, u);
+                    this.nextkey_++;
+                    if (u.state_ == UserService.stateNew) {
+                        this.sendConfirmationEmail(u);
+                    }
+                    xeroDBLoggerLog('INFO', 'UserService: added username "' + username + '" to the database');
+                    this.notify('user-added', 'The user "' + username + '" was added');
+                }
+            });
+        }
+
+        return ret;
+    }
+
+    private hashPassword(pass: string): string {
+        return crypto.createHash('sha256').update(pass).digest('hex');
+    }
+
+    protected createTables() {
+        let sql =
+            `CREATE TABLE users (
+                id int primary key not null,
+                username text not null,
+                password text not null,
+                lastname text not null,
+                firstname text not null,
+                email text not null,
+                state text not null,
+                roles text);
+            ` ;
+        this.db().exec(sql)
+
+        sql =
+            `CREATE TABLE confirm (
+            token text not null,
+            username text not null);
+          ` ;
+        this.db().exec(sql)
+
+        sql =
+            `CREATE TABLE lostpwd (
+          token text not null,
+          username text not null);
+        ` ;
+        this.db().exec(sql)
+
+        let roles: string[] = ['admin'];
+        this.addUser('admin', 'grond1425', 'Griffin', 'Butch', 'butchg@comcast.net', UserService.stateActive, roles);
+    }
+
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         xeroDBLoggerLog('DEBUG', "UserService: rest api '" + req.path + "'");
         let handled: boolean = false;
@@ -425,6 +628,9 @@ export class UserService {
         else if (req.path === '/users/login') {
             let u: User | Error = this.canUserLogin(req.body.username, req.body.password);
             if (u instanceof User) {
+                if (req.socket.remoteAddress) {
+                    u.ipaddr_ = req.socket.remoteAddress ;
+                }
                 if (u.state_ === UserService.stateActive) {
                     let data = new Uint8Array(64);
                     let cookieval = this.getRandomValues(data);
@@ -562,231 +768,7 @@ export class UserService {
         }
     }
 
-    public userFromRequest(req: Request<{}, any, any, any, Record<string, any>>): User | null {
-        if (req.cookies.xeropartdb === undefined)
-            return null;
-
-        for (let [key, user] of this.users_) {
-            if (user.cookie_ === req.cookies.xeropartdb) {
-                return user;
-            }
-        }
-
-        return null;
+    public notify(activity: string, msg: string) {
     }
-
-    public userFromCookie(cookie: string): User | null {
-        for (let [key, user] of this.users_) {
-            if (user.cookie_ === cookie) {
-                return user;
-            }
-        }
-
-        return null;
-    }
-
-    public userFromUserName(username: string): User | null {
-        for (let [key, user] of this.users_) {
-            if (user.username_ === username) {
-                return user;
-            }
-        }
-
-        return null;
-    }
-
-    public userFromEmail(email: string): User | null {
-        for (let [key, user] of this.users_) {
-            if (user.email_ === email) {
-                return user;
-            }
-        }
-
-        return null;
-    }
-
-    public canUserLogin(username: string, password: string): Error | User {
-        let ret: Error | User = new Error(UserService.UnknownUserError);
-
-        if (!this.users_.has(username)) {
-            ret = new Error(UserService.UnknownUserError);
-        }
-        else {
-            let u: User = this.users_.get(username)!;
-
-            let hashed: string = this.hashPassword(password);
-            if (hashed !== u.password_) {
-                ret = new Error(UserService.IncorrectPasswordError);
-            }
-            else {
-                ret = u;
-            }
-        }
-
-        return ret;
-    }
-
-    private sendLostPasswordEmail(u: User) {
-        let token: string = crypto.createHash('sha256').update(u.username_).digest('hex');
-        let msg: string = "";
-
-        //
-        // Delete any old lost password records for this user or token
-        //
-        let sql: string = 'delete from lostpwd where username="' + u.username_ + '";';
-        this.db_.exec(sql);
-
-        sql = 'delete from lostpwd where token="' + token + '";';
-        this.db_.exec(sql);
-
-        //
-        // Create one new record for this user
-        //
-        sql = 'INSERT into lostpwd VALUES (';
-        sql += '"' + token + '",';
-        sql += '"' + u.username_ + '");';
-
-        this.db_.exec(sql, (err) => {
-            if (err) {
-                xeroDBLoggerLog('ERROR', 'UserService: failed to add user "' + u.username_ + '" to the lost password database - ' + err);
-                xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
-            }
-            else {
-                msg += 'Please click <a href="' + config.url() + '/users/lostpwdreturn/' + token + '"> here</a> to reset your password "' + u.username_ + "'";
-                sendEmail(u.email_, 'Lost XeroPartsDB Account Password', msg);
-            }
-        });
-    }
-
-    private sendConfirmationEmail(u: User) {
-        let cookie: string = crypto.createHash('sha256').update(u.username_).digest('hex');
-        let msg: string = "";
-
-        let sql = 'INSERT into confirm VALUES (';
-        sql += '"' + cookie + '",';
-        sql += '"' + u.username_ + '");';
-
-        this.db_.exec(sql, (err) => {
-            if (err) {
-                xeroDBLoggerLog('ERROR', 'UserService: failed to add user "' + u.username_ + '" to the confirmation database - ' + err);
-                xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
-            }
-            else {
-                msg += 'Please click <a href="' + config.url() + '/users/confirm/' + cookie + '"> here</a> to confirm the user "' + u.username_ + "'";
-                sendEmail(u.email_, 'Confirm XeroPartsDB Account', msg);
-            }
-        });
-    }
-
-    private rolesToRolesString(roles: string[]): string {
-        let rolestr: string = "";
-        for (let role of roles) {
-            if (rolestr.length > 0) {
-                rolestr += ",";
-            }
-            rolestr += role;
-        }
-
-        return rolestr;
-    }
-
-    private roleStringtoRoles(rolesstr: string): string[] {
-        return rolesstr.split(',');
-    }
-
-    public addUser(username: string, password: string, lastname: string, firstname: string, email: string, state: string | null, roles: string[]): Error | null {
-        let ret: Error | null = null;
-
-        if (this.users_.has(username)) {
-            ret = new Error("duplicate username '" + username + "' requested");
-        }
-        else if (this.userFromEmail(email) !== null) {
-            ret = new Error("an account with the email '" + email + "' already exists");
-        }
-        else {
-            let rolestr: string = this.rolesToRolesString(roles);
-            password = this.hashPassword(password);
-
-            if (state === null) {
-                state = UserService.stateNew;
-            }
-
-            let sql = 'INSERT INTO users VALUES (';
-            sql += String(this.nextkey_) + ',';
-            sql += '"' + username + '",';
-            sql += '"' + password + '",';
-            sql += '"' + lastname + '",';
-            sql += '"' + firstname + '",';
-            sql += '"' + email + '",';
-            sql += '"' + state + '",';
-            sql += '"' + rolestr + '");';
-            this.db_.exec(sql, (err) => {
-                if (err) {
-                    xeroDBLoggerLog('ERROR', 'UserService: failed to add user "' + username + '" to the database - ' + err);
-                    xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
-                }
-                else {
-                    let u: User = new User(this.nextkey_, username, password, lastname, firstname, email, state!, roles);
-                    this.users_.set(username, u);
-                    this.nextkey_++;
-                    if (u.state_ == UserService.stateNew) {
-                        this.sendConfirmationEmail(u);
-                    }
-                    xeroDBLoggerLog('INFO', 'UserService: added username "' + username + '" to the database');
-                    this.notify('user-added', 'The user "' + username + '" was added');
-                }
-            });
-        }
-
-        return ret;
-    }
-
-    private hashPassword(pass: string): string {
-        return crypto.createHash('sha256').update(pass).digest('hex');
-    }
-
-    private createDatabaseAndTables() {
-        xeroDBLoggerLog('INFO', 'UserService: creating new database at path "' + this.dbpath_ + '"');
-        this.db_ = new sqlite3.Database(this.dbpath_, (err) => {
-            if (err) {
-                xeroDBLoggerLog('ERROR', 'UserService: error creating sqlite database - ' + err.message);
-                exit(1);
-            }
-            else {
-                this.createTables();
-                let roles: string[] = ['admin'];
-                this.addUser('admin', 'grond1425', 'Griffin', 'Butch', 'butchg@comcast.net', UserService.stateActive, roles);
-            }
-        });
-    }
-
-    private createTables() {
-        let sql =
-            `CREATE TABLE users (
-                id int primary key not null,
-                username text not null,
-                password text not null,
-                lastname text not null,
-                firstname text not null,
-                email text not null,
-                state text not null,
-                roles text);
-            ` ;
-        this.db_.exec(sql)
-
-        sql =
-            `CREATE TABLE confirm (
-            token text not null,
-            username text not null);
-          ` ;
-        this.db_.exec(sql)
-
-        sql =
-            `CREATE TABLE lostpwd (
-          token text not null,
-          username text not null);
-        ` ;
-        this.db_.exec(sql)
-    }
-
 }
+
