@@ -22,6 +22,7 @@ export class RobotPart {
     parent_ : number;
     robot_ : number ;
     part_ : number;
+    state_ : string;
     quantity_ : number ;
     description_ : string ;
     type_ : string;
@@ -30,10 +31,11 @@ export class RobotPart {
     modified_ : string ;
     attribs_ : Map<string, string> ;
 
-    constructor(parent: number, robot: number, part: number, quantity: number, desc: string, type: string, uname: string, created: string, modified: string, attribs: Map<string, string>) {
+    constructor(parent: number, robot: number, part: number, state: string, quantity: number, desc: string, type: string, uname: string, created: string, modified: string, attribs: Map<string, string>) {
         this.parent_ = parent ;
         this.robot_ = robot ;
         this.part_ = part ;
+        this.state_ = state ;
         this.quantity_ = quantity ;
         this.description_ = desc ;
         this.type_ = type ;

@@ -9,6 +9,7 @@ import { xeroDBLoggerLog } from './logger';
 import { PartAttr } from './PartAttr';
 import { DatabaseService } from './DatabaseService';
 import { AuditService } from './AuditService';
+import { NextState, PartState } from './PartState';
 
 //
 // Part numbers
@@ -29,8 +30,25 @@ export class RobotService extends DatabaseService {
     private static readonly partTypeAssembly: string = 'A';
     private static readonly partTypeManufactured: string = 'M';
 
+    private static readonly stateNew: string = "new" ;
+    private static readonly stateDone: string = "Done" ;
+
     private static readonly robotNumberLength: number = 3;
     private static readonly partNumberLength: number = 4;
+
+    private static readonly methodStudent = "student" ;
+    private static readonly methodMentor = "mentor" ;
+    private static readonly methodAnyone = "anyone" ;
+    private static readonly methodAssignedStudent = "assigned-student" ;
+    private static readonly methodAssignedMentor = "assigned-mentor" ;
+
+    private static readonly manufacturing_types_ = [
+        "3d Mark Forge Print",
+        "3d Stratus Print",
+        "Velox C & C Router",
+        "Omio",
+        "Misc",
+    ] ;
 
     private static readonly COTSAttributes = [
         new PartAttr('Vendor Name', PartAttr.TypeStringName, true, ''),
@@ -39,15 +57,84 @@ export class RobotService extends DatabaseService {
         new PartAttr('Cost', PartAttr.TypeDoubleName, false, '0.0'),
     ];
 
+    private static readonly COTSStates = [
+        // States: new, requested, ordered, complete
+        new PartState(RobotService.stateNew, 
+            [
+                new NextState('requested', RobotService.methodAssignedStudent)
+            ]),
+        new PartState('requested',
+            [
+                new NextState('ordered', RobotService.methodMentor),
+                new NextState(RobotService.stateDone, RobotService.methodMentor)
+            ]),
+        new PartState('ordered',
+            [
+                new NextState(RobotService.stateDone, RobotService.methodAnyone)
+            ]),
+        new PartState(RobotService.stateDone,
+            [
+                new NextState('new', RobotService.methodMentor),
+                new NextState('ordered', RobotService.methodMentor),
+                new NextState('requested', RobotService.methodMentor)
+            ]),
+    ] ;
+
     private static readonly AssemblyAttributes = [
-        new PartAttr('Design Student', PartAttr.TypeStudentName, false, ''),
-        new PartAttr('Design Mentor', PartAttr.TypeMentorName, false, ''),
     ];
 
+    private static readonly AssemblyStates = [
+        // States: new, requested, ordered, complete
+        new PartState(RobotService.stateNew, 
+            [
+                new NextState('requested', RobotService.methodAssignedStudent)
+            ]),
+        new PartState('requested',
+            [
+                new NextState('ordered', RobotService.methodMentor),
+                new NextState(RobotService.stateDone, RobotService.methodMentor)
+            ]),
+        new PartState('ordered',
+            [
+                new NextState(RobotService.stateDone, RobotService.methodAnyone)
+            ]),
+        new PartState(RobotService.stateDone,
+            [
+                new NextState('new', RobotService.methodMentor),
+                new NextState('ordered', RobotService.methodMentor),
+                new NextState('requested', RobotService.methodMentor)
+            ]),
+    ] ;
+
     private static readonly ManufacturedAttributes = [
-        new PartAttr('Design Student', PartAttr.TypeStudentName, false, ''),
-        new PartAttr('Design Mentor', PartAttr.TypeMentorName, false, ''),
+        new PartAttr('Method', PartAttr.TypeManufacturingType, false, ''),
+        new PartAttr('Cost', PartAttr.TypeDoubleName, false, '0.0'),
     ];
+
+    private static readonly ManufacturedStates = [
+        // States: new, requested, ordered, complete
+        new PartState(RobotService.stateNew, 
+            [
+                new NextState('requested', RobotService.methodAssignedStudent)
+            ]),
+        new PartState('requested',
+            [
+                new NextState('ordered', RobotService.methodMentor),
+                new NextState(RobotService.stateDone, RobotService.methodMentor)
+            ]),
+        new PartState('ordered',
+            [
+                new NextState(RobotService.stateDone, RobotService.methodAnyone)
+            ]),
+        new PartState(RobotService.stateDone,
+            [
+                new NextState('new', RobotService.methodMentor),
+                new NextState('ordered', RobotService.methodMentor),
+                new NextState('requested', RobotService.methodMentor)
+            ]),
+    ] ;    
+
+
 
     nextkey_: number;
     robots_: Map<number, Robot>;
@@ -91,6 +178,7 @@ export class RobotService extends DatabaseService {
             parent int not null,
             robotid int not null,
             partno int not null,
+            state text not null,
             quantity int not null,
             desc text not null,
             type text not null,
@@ -305,6 +393,7 @@ export class RobotService extends DatabaseService {
         let sql: string = 'UPDATE parts SET';
         sql += " desc='" + part.description_ + "',";
         sql += " quantity=" + String(part.quantity_) + ",";
+        sql += " state='" + part.state_ + "'," ;
         sql += " attribs='" + this.escapeString(this.attribMapToString(part.attribs_)) + "'";
         sql += ' WHERE robotid=' + String(part.robot_);
         sql += ' AND partno=' + String(part.part_);
@@ -332,12 +421,13 @@ export class RobotService extends DatabaseService {
         return ret;
     }
 
-    private async createNewPart(u: User, parent: number, robot: number, partno: number, type: string, desc: string, attribs: Map<string, string>): Promise<void> {
+    private async createNewPart(u: User, parent: number, robot: number, partno: number, state: string, type: string, desc: string, attribs: Map<string, string>): Promise<void> {
 
         let sql = 'INSERT INTO parts VALUES (';
         sql += String(parent) + ",";
         sql += String(robot) + ",";
         sql += String(partno) + ",";
+        sql += "'" + state + "'," ;
         sql += String(1) + ",";
         sql += "'" + this.escapeString(desc) + "',";
         sql += "'" + type + "',";
@@ -405,6 +495,7 @@ export class RobotService extends DatabaseService {
         const parentKey = 'parent' as ObjectKey;
         const partnoKey = 'partno' as ObjectKey;
         const quantityKey = 'quantity' as ObjectKey;
+        const stateKey = 'state' as ObjectKey ;
         const descKey = 'desc' as ObjectKey;
         const typeKey = 'type' as ObjectKey;
         const usernameKey = 'username' as ObjectKey;
@@ -414,6 +505,7 @@ export class RobotService extends DatabaseService {
 
         let parent = (obj[parentKey] as unknown) as number;
         let partno = (obj[partnoKey] as unknown) as number;
+        let state = (obj[stateKey] as unknown) as string ;
         let quantity = (obj[quantityKey] as unknown) as number;
         let desc = (obj[descKey] as unknown) as string;
         let type = (obj[typeKey] as unknown) as string;
@@ -429,7 +521,7 @@ export class RobotService extends DatabaseService {
             attrlist = this.stringToAttribMap(attribs);
         }
 
-        let retval: RobotPart = new RobotPart(parent, robot, partno, quantity, desc, type, username, created, modified, attrlist);
+        let retval: RobotPart = new RobotPart(parent, robot, partno, state, quantity, desc, type, username, created, modified, attrlist);
         this.applyAttributes(retval);
 
         return retval;
@@ -438,7 +530,7 @@ export class RobotService extends DatabaseService {
     private async getOnePart(robot: number, partno: number): Promise<RobotPart> {
         let ret: Promise<RobotPart> = new Promise<RobotPart>((resolve, reject) => {
             let retval: RobotPart;
-            let sql = 'select parent, partno, quantity, desc, type, username, created, modified, attribs from parts where robotid=' + String(robot) + ' AND partno=' + String(partno);
+            let sql = 'select parent, partno, state, quantity, desc, type, username, created, modified, attribs from parts where robotid=' + String(robot) + ' AND partno=' + String(partno);
             this.db().all(sql, async (err, rows) => {
                 if (rows.length === 0) {
                     reject(new Error('no such record found'));
@@ -457,7 +549,7 @@ export class RobotService extends DatabaseService {
     private async getPartsForRobot(robot: number): Promise<RobotPart[]> {
         let ret: Promise<RobotPart[]> = new Promise<RobotPart[]>((resolve, reject) => {
             let retval: RobotPart[] = [];
-            let sql = 'select parent, partno, quantity, desc, type, username, created, modified, attribs from parts where robotid=' + String(robot) + ';';
+            let sql = 'select parent, partno, state, quantity, desc, type, username, created, modified, attribs from parts where robotid=' + String(robot) + ';';
             this.db().all(sql, async (err, rows) => {
                 if (err) {
                     resolve([]);
@@ -547,6 +639,7 @@ export class RobotService extends DatabaseService {
         ret['creator'] = part.username_;
         ret['modified'] = part.modified_;
         ret['quantity'] = part.quantity_;
+        ret['state'] = part.state_ ;
         ret['attribs'] = this.attribMapToArray(part.attribs_, this.getAttributes(part));
 
         if (part.type_ === RobotService.partTypeAssembly) {
@@ -610,7 +703,7 @@ export class RobotService extends DatabaseService {
         //
         let attribs: Map<string, string> = new Map<string, string>();
         let desc: string = 'Top Level Robot Subsystem' ;
-        await this.createNewPart(u, -robotno, robotno, 1, RobotService.partTypeAssembly, desc, attribs);
+        await this.createNewPart(u, -robotno, robotno, 1, RobotService.stateNew, RobotService.partTypeAssembly, desc, attribs);
 
         let current = this.now();
 
@@ -750,7 +843,7 @@ export class RobotService extends DatabaseService {
         let attribs: Map<string, string> = new Map<string, string>();
         let newpartno: number = this.nextpart_.get(robot)!
         this.nextpart_.set(robot, newpartno + 1);
-        await this.createNewPart(u, parent, robot, newpartno, type, 'Double Click To Edit', attribs);
+        await this.createNewPart(u, parent, robot, newpartno, RobotService.stateNew, type, 'Double Click To Edit', attribs);
 
         let url: string = '/robots/viewpart?partno=' + this.partnoString(robot, 1);
         res.redirect(url);
@@ -884,6 +977,39 @@ export class RobotService extends DatabaseService {
         res.redirect(url);
     }
 
+    private async copypart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+
+        if (req.query.partno === undefined) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart'));
+            return;
+        }
+
+        let partno: number[] = this.stringToPartno(req.query.partno);
+        if (partno.length !== 2) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart'));
+            return;
+        }
+
+        if (req.query.parent === undefined) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart'));
+            return;
+        }
+
+        let parentno: number[] = this.stringToPartno(req.query.parent);
+        if (parentno.length !== 2) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart'));
+            return;
+        }
+
+        let newpartno: number = this.nextpart_.get(partno[0])!
+        this.nextpart_.set(partno[0], newpartno + 1);
+        let part: RobotPart = await this.getOnePart(partno[0], partno[1]);
+        await this.createNewPart(u, parentno[1], partno[0], newpartno, RobotService.stateNew, part.type_, part.description_, part.attribs_);
+
+        let url: string = '/robots/viewpart?partno=' + this.partnoString(partno[0], 1);
+        res.redirect(url);
+    }    
+
     private async partinfo(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         if (req.query.partno === undefined) {
             res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart'));
@@ -922,6 +1048,10 @@ export class RobotService extends DatabaseService {
         }
         
         res.json(ret);
+    }
+
+    private async manufacturingtypes(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        res.json(RobotService.manufacturing_types_);
     }
 
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
@@ -968,12 +1098,20 @@ export class RobotService extends DatabaseService {
             this.reparentpart(u, req, res);
             handled = true;
         }
+        else if (req.path === '/robots/copypart') {
+            this.copypart(u, req, res);
+            handled = true;
+        }
         else if (req.path === '/robots/partinfo') {
             this.partinfo(u, req, res);
             handled = true;
         }
         else if (req.path === '/robots/alldescs') {
             this.alldescs(u, req, res);
+            handled = true;
+        }
+        else if (req.path === '/robots/mantypes') {
+            this.manufacturingtypes(u, req, res);
             handled = true;
         }
 

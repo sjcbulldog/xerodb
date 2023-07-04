@@ -665,16 +665,19 @@ export class UserService extends DatabaseService {
                     u.cookie_ = cookiestr;
                     res.redirect('/menu')
                     xeroDBLoggerLog('INFO', 'the user "' + u.username_ + '" has logged into the system');
+                    this.audit_.users(u.username_, u.ipaddr_, 'user logged into the system');
                 }
                 else if (u.state_ === UserService.stateDisabled) {
+                    this.audit_.users(u.username_, u.ipaddr_, 'disabled user tried to log in');
                     res.send(createMessageHtml('Disabled Account','Your account has been disabled.  Please talk to a mentor about this issue'));
                 }
                 else if (u.state_ === UserService.stateNew) {
-                    this.audit_.users(u.username_, u.ipaddr_, "sent additional confirmation email to address '" + u.email_ + "'");
+                    this.audit_.users(u.username_, u.ipaddr_, "new user tried to log in, sent additional confirmation email to address '" + u.email_ + "'");
                     this.sendConfirmationEmail(u);
                     res.send(createMessageHtml('New User', 'You have not confirmed you email address.  A new confirmation email has been sent.  Please click the link in the confirmation email to confirm your email address.'));
                 }
                 else if (u.state_ === UserService.statePending) {
+                    this.audit_.users(u.username_, u.ipaddr_, 'pending user tried to log in');
                     res.send(createMessageHtml('Awaiting Approval','Your account is pending approval by an administrator of this system.'));
                 }
             }

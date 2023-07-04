@@ -4,6 +4,7 @@ export class PartAttr {
     public static readonly TypeDoubleName = "double" ;
     public static readonly TypeMentorName = "mentor" ;
     public static readonly TypeStudentName = "student" ;
+    public static readonly TypeManufacturingType = "manufacturingtype" ;
 
     name_ : string ;
     type_ : string ;

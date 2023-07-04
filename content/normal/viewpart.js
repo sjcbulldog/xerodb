@@ -11,7 +11,7 @@ document.addEventListener("DOMContentLoaded", (event) => {
             { id: "*", title: "Part Number", width: "220px" },
             { id: "ntype", title: "Type", width: "110px" },
             { id: "quantity", title: "Quantity", width: "80px" },
-            { id: "creator", title: "Created By", width: "140px" },
+            { id: "state", title: "State", width: "140px" },
             { id: "desc", title: "Description", /* width: "400px" */},
         ],
         load: function (e) {
@@ -28,12 +28,14 @@ document.addEventListener("DOMContentLoaded", (event) => {
                 if (/[0-9][0-9][0-9]-0001/.test(e.node.key)) {
                     return false;
                 }
-                e.event.dataTransfer.effectAllowed = "all";
+                if (e.event.ctrlKey)
+                    e.event.dataTransfer.effectAllowed = "copy" ;
+                else 
+                    e.event.dataTransfer.effectAllowed = "move" ;
                 return true;
             },
             dragEnter: (e) => {
                 if (e.node.data.ntype.startsWith('A')) {
-                    e.event.dataTransfer.dropEffect = "move";
                     return "over";
                 }
                 else {
@@ -41,13 +43,21 @@ document.addEventListener("DOMContentLoaded", (event) => {
                 }
             },
             drop: (e) => {
-                window.location.href = "/robots/reparentpart?partno=" + e.sourceNode.key + "&parent=" + e.node.key;
+                if (e.event.ctrlKey)
+                    window.location.href = "/robots/copypart?partno=" + e.sourceNode.key + "&parent=" + e.node.key;
+                else 
+                    window.location.href = "/robots/reparentpart?partno=" + e.sourceNode.key + "&parent=" + e.node.key;
             },
         },
         activate: function (e) {
         },
         dblclick: function (e) {
-            window.location.href = "/robots/editpart?partno=" + e.node.key + "&parttype=" + e.node.data.ntype;
+            if (e.info.colId === 'state') {
+                window.location.href = "/robots/newstate?partno=" + e.node.key ;
+            }
+            else {
+                window.location.href = "/robots/editpart?partno=" + e.node.key + "&parttype=" + e.node.data.ntype;
+            }
         }
     });
 });
