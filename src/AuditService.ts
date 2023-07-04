@@ -48,6 +48,7 @@ export class AuditService extends DatabaseService {
                 ipaddr text not null,
                 timestamp text not null,
                 partno text not null,
+                desc text not null,
                 action text not null);
             ` ;
             this.db().exec(sql, (err) => {
@@ -59,39 +60,133 @@ export class AuditService extends DatabaseService {
             });     
     }
 
-    public parts(username: string, ipaddr: string, partno: string, action: string) {
-        let sql = 'INSERT INTO login VALUES (';
+    public parts(username: string, ipaddr: string, partno: string, desc: string, action: string) {
+        let sql = 'INSERT INTO audit VALUES (';
         sql += "'" + username + "'," ;
         sql += "'" + ipaddr + "'," ;
         sql += "'" + this.now() + "',";
         sql += "'" + partno + "'," ;
+        sql += "'" + this.escapeString(desc) + "'," ;
         sql += "'" + this.escapeString(action) + "')" ;
         this.db().exec(sql, (err) => {
             if (err) {
-                xeroDBLoggerLog('ERROR', 'RobotService: failed to update history table for login - ' + err.message);
+                xeroDBLoggerLog('ERROR', 'AuditService:failed to update audit table - ' + err.message);
                 xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
             }
         });
     }
 
-    public users(username: string, ipaddr: string, action: string) {
+    public users(username: string, ipaddr: string | undefined, action: string) {
         let sql = 'INSERT INTO login VALUES (';
         sql += "'" + username + "'," ;
+        if (ipaddr)
+            sql += "'" + ipaddr + "'," ;
+        else
+            sql += "'***UNKNOWN***'," ;
         sql += "'" + this.now() + "',";
-        sql += "'" + ipaddr + "'," ;
+        
         sql += "'" + this.escapeString(action) + "')" ;
         this.db().exec(sql, (err) => {
             if (err) {
-                xeroDBLoggerLog('ERROR', 'RobotService: failed to update history table for login - ' + err.message);
+                xeroDBLoggerLog('ERROR', 'AuditService:failed to update login table - ' + err.message);
                 xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
             }
         });
     }
 
-    private async getusers(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+    public updatePartDesc(partno: string, newdesc: string) {
+        let sql = 'UPDATE audit SET' ;
+        sql += " desc='" + this.escapeString(newdesc) + "'";
+        sql += " WHERE partno='" + partno + "'";
+        this.db().exec(sql, (err) => {
+            if (err) {
+                xeroDBLoggerLog('ERROR', 'AuditService:failed to update part desc in audit table - ' + err.message);
+                xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
+            }
+        });
     }
 
-    private async getparts(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+    private async userreport(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        let sql =
+            `
+            select username, ipaddr, timestamp, action from login;
+            `;
+        this.db().all(sql, (err, rows) => {
+            if (err) {
+                res.status(500).json({});
+            }
+            else {
+                let ret : LooseObject[] = [] ;
+                for(let row of rows) {
+                    let obj: Object = row as Object;
+                    type ObjectKey = keyof typeof obj;
+                    const usernameKey = 'username' as ObjectKey;
+                    const ipaddrKey = 'ipaddr' as ObjectKey;
+                    const timestampKey = 'timestamp' as ObjectKey;
+                    const actionKey = 'action' as ObjectKey;
+
+                    let username = (obj[usernameKey] as unknown) as number;
+                    let ipaddr = obj[ipaddrKey] as unknown;
+                    let timestamp = obj[timestampKey] as unknown;
+                    let action = obj[actionKey] as unknown;
+
+                    let lobj : LooseObject = {} ;
+                    lobj['title'] = username ;
+                    lobj['username'] = username ;
+                    lobj['ipaddr'] = ipaddr ;
+                    lobj['timestamp'] = timestamp ;
+                    lobj['action'] = action ;
+
+                    ret.push(lobj);
+                }
+                res.json(ret);
+            }
+        });        
+    }
+
+    private async partreport(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        let sql =
+        `
+        select username, ipaddr, timestamp, action, partno, desc from audit;
+        `;
+        this.db().all(sql, (err, rows) => {
+            if (err) {
+                res.status(500).json({});
+            }
+            else {
+                let ret : LooseObject[] = [] ;
+                for(let row of rows) {
+                    let obj: Object = row as Object;
+                    type ObjectKey = keyof typeof obj;
+                    const usernameKey = 'username' as ObjectKey;
+                    const ipaddrKey = 'ipaddr' as ObjectKey;
+                    const timestampKey = 'timestamp' as ObjectKey;
+                    const partnoKey = 'partno' as ObjectKey;
+                    const actionKey = 'action' as ObjectKey;
+                    const descKey = 'desc' as ObjectKey;
+
+                    let username = (obj[usernameKey] as unknown) as number;
+                    let ipaddr = obj[ipaddrKey] as unknown;
+                    let timestamp = obj[timestampKey] as unknown;
+                    let action = obj[actionKey] as unknown;
+                    let partno = obj[partnoKey] as unknown;
+                    let desc = obj[descKey] as unknown ;
+
+                    let lobj : LooseObject = {} ;
+                    lobj['title'] = partno ;
+                    lobj['tooltip'] = desc ;
+                    lobj['username'] = username ;
+                    lobj['ipaddr'] = ipaddr ;
+                    lobj['timestamp'] = timestamp ;
+                    lobj['partno'] = partno ;
+                    lobj['action'] = action ;
+                    lobj['desc'] = desc ;
+
+                    ret.push(lobj);
+                }
+                res.json(ret);
+            }
+        });    
     }    
 
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
@@ -99,12 +194,12 @@ export class AuditService extends DatabaseService {
 
         let handled: boolean = false;
 
-        if (req.path === '/audit/getusers') {
-            this.getusers(req, res);
+        if (req.path === '/audit/userreport') {
+            this.userreport(req, res);
             handled = true;
         }
-        else if (req.path === '/audit/getparts') {
-            this.getparts(req, res);
+        else if (req.path === '/audit/partreport') {
+            this.partreport(req, res);
             handled = true;
         }
 

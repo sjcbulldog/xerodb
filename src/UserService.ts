@@ -168,6 +168,7 @@ export class UserService extends DatabaseService {
                 if (u != null) {
                     u.state_ = UserService.statePending;
                     this.updateUser(u);
+                    this.audit_.users(u.username_, u.ipaddr_, 'confirmed email for user, state set to PENDING');
                 }
 
                 sql = 'delete from confirm where token="' + token + '";';
@@ -312,6 +313,8 @@ export class UserService extends DatabaseService {
                 sendEmail(u.email_, 'XeroDB Account Active', 'Your XeroDB account is now active and ready for use.');
             }
 
+            let oldst: string = u.state_ ;
+
             u.email_ = req.body.email;
             u.firstname_ = req.body.firstname;
             u.lastname_ = req.body.lastname
@@ -331,6 +334,10 @@ export class UserService extends DatabaseService {
             }
 
             this.updateUser(u);
+
+            if (oldst == UserService.statePending && u.state_ == UserService.stateActive) {
+                this.audit_.users(u.username_, req.socket.remoteAddress, 'user moved from pending to active') ;
+            }
 
             let changer: string = "" ;
             if (uch === null) {
@@ -607,7 +614,7 @@ export class UserService extends DatabaseService {
             }
         });
 
-        let roles: string[] = ['admin'];
+        let roles: string[] = ['admin', 'mentor'];
         this.addUser('admin', 'grond1425', 'Griffin', 'Butch', 'butchg@comcast.net', UserService.stateActive, roles);
     }
 
@@ -637,6 +644,7 @@ export class UserService extends DatabaseService {
             let ret = this.addUser(req.body.username, req.body.password, req.body.lastname, req.body.firstname, req.body.email, null, roles);
             if (ret == null) {
                 res.redirect('/nologin/confirm.html');
+                this.audit_.users(req.body.username, req.socket.remoteAddress, 'user registered');
             }
             else {
                 res.send(createMessageHtml('Error', ret.message))
@@ -662,6 +670,7 @@ export class UserService extends DatabaseService {
                     res.send(createMessageHtml('Disabled Account','Your account has been disabled.  Please talk to a mentor about this issue'));
                 }
                 else if (u.state_ === UserService.stateNew) {
+                    this.audit_.users(u.username_, u.ipaddr_, "sent additional confirmation email to address '" + u.email_ + "'");
                     this.sendConfirmationEmail(u);
                     res.send(createMessageHtml('New User', 'You have not confirmed you email address.  A new confirmation email has been sent.  Please click the link in the confirmation email to confirm your email address.'));
                 }

@@ -117,6 +117,23 @@ app.all('/robots/*', (req, res) => {
   }
 });
 
+app.all('/audit/*', (req, res) => {
+  try {
+    auditsrv.get(req, res);
+  }
+  catch (err) {
+    let errobj: Error = err as Error;
+
+    if (errobj !== undefined) {
+      if (errobj.stack !== undefined) {
+        xeroDBLoggerLog('DEBUG', errobj.stack.toString());
+      }
+    }
+    xeroDBLoggerLog('ERROR', 'exception caught for URL "' + req.url + '"');
+    res.status(500).send(createMessageHtml('Internal Error', 'internal error - exception thrown - check log file'));
+  }
+});
+
 app.all('/menu', (req, res) => {
   try {
     let u: User | null = usersrv.userFromRequest(req);

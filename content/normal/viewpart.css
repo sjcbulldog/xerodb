@@ -242,3 +242,12 @@ form:after {
 	background-position: 0 -135px;
 	color: #00aeef;
 }
+
+#commands {
+    -webkit-border-radius: 30px;
+	-moz-border-radius: 30px;
+	-ms-border-radius: 30px;
+	-o-border-radius: 30px;
+	border-radius: 30px;
+    border: 1px solid #D69E31;
+}

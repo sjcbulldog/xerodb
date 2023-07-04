@@ -318,7 +318,7 @@ export class RobotService extends DatabaseService {
                         reject(err);
                     }
                     else {
-                        this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(part.robot_, part.part_), 'robot part modified');
+                        this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(part.robot_, part.part_), part.description_, 'robot part modified');
                         this.updateRobotModified(part.robot_);
                         resolve();
                     }
@@ -357,7 +357,7 @@ export class RobotService extends DatabaseService {
                     else {
                         xeroDBLoggerLog('INFO', 'UserService: added part "' + this.partnoString(robot, partno) + '" to the database');
                         this.updateRobotModified(robot);
-                        this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(robot, partno), 'created new robot part');
+                        this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(robot, partno), desc, 'created new robot part');
                         resolve();
                     }
                 });
@@ -609,7 +609,8 @@ export class RobotService extends DatabaseService {
         // First create a new part
         //
         let attribs: Map<string, string> = new Map<string, string>();
-        await this.createNewPart(u, -robotno, robotno, 1, RobotService.partTypeAssembly, req.body.desc, attribs);
+        let desc: string = 'Top Level Robot Subsystem' ;
+        await this.createNewPart(u, -robotno, robotno, 1, RobotService.partTypeAssembly, desc, attribs);
 
         let current = this.now();
 
@@ -637,7 +638,7 @@ export class RobotService extends DatabaseService {
 
                 this.nextpart_.set(robotno, 2);
 
-                this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(robotno, 0), "created new robot'" + req.body.name + "', robot number " + robotno);
+                this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(robotno, 0), desc, "created new robot'" + req.body.name + "', robot number " + robotno);
             }
         });
 
@@ -795,6 +796,8 @@ export class RobotService extends DatabaseService {
             return;
         }
 
+        let olddesc: string = part.description_ ;
+
         part.description_ = req.body.desc;
         part.quantity_ = req.body.quantity;
 
@@ -806,6 +809,10 @@ export class RobotService extends DatabaseService {
         }
 
         this.updatePart(u, part);
+
+        if (olddesc !== part.description_) {
+            this.audit_.updatePartDesc(req.body.partno, part.description_);
+        }
 
         let url: string = '/robots/viewpart?partno=' + this.partnoString(part.robot_, 1);
         res.redirect(url);
