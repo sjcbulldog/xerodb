@@ -1,11 +1,11 @@
 Users
 -----
-- Varied roles, not just normal and admin
+- Varied roles, not just admin, mentor, student
 
 Robot
 -----
-- Edit robot part
 - Notifications
+- Robot parts should be able to drag and drop COTS to new assembly
 
 Inventory
 ---------
