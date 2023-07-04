@@ -107,7 +107,7 @@ export class UserService extends DatabaseService {
         for (let [key, user] of this.users_) {
             if (user.isAdmin()) {
                 let msg: string = 'The user ' + u.username_ + ' has confirmed their account and is now pending.';
-                msg += '<br>Click <a href="' + config.url() + '"here</a> to log into the XeroDB site.'
+                msg += '<br>Click <a href="' + config.url() + '">here</a> to log into the XeroDB site.'
                 sendEmail(user.email_, 'XeroDB: New User ' + u.username_ + ' pending', msg);
             }
         }
@@ -514,10 +514,10 @@ export class UserService extends DatabaseService {
         let ret: Error | null = null;
 
         if (this.users_.has(username)) {
-            ret = new Error("duplicate username '" + username + "' requested");
+            ret = new Error("A user with the name '" + username + "' already exists");
         }
         else if (this.userFromEmail(email) !== null) {
-            ret = new Error("an account with the email '" + email + "' already exists");
+            ret = new Error("An account with the email '" + email + "' already exists");
         }
         else {
             let rolestr: string = this.rolesToRolesString(roles);
@@ -573,21 +573,39 @@ export class UserService extends DatabaseService {
                 state text not null,
                 roles text);
             ` ;
-        this.db().exec(sql)
+        this.db().exec(sql, (err) => {
+                if (err) {
+                    let msg: string = this.name() + ": cannot create table 'users' in UserService" ;
+                    xeroDBLoggerLog('ERROR', msg);
+                    throw new Error(msg)
+                }
+        });
 
         sql =
             `CREATE TABLE confirm (
-            token text not null,
-            username text not null);
+                token text not null,
+                username text not null);
           ` ;
-        this.db().exec(sql)
+        this.db().exec(sql, (err) => {
+            if (err) {
+                let msg: string = this.name() + ": cannot create table 'confirm' in UserService" ;
+                xeroDBLoggerLog('ERROR', msg);
+                throw new Error(msg)
+            }
+        });
 
         sql =
             `CREATE TABLE lostpwd (
-          token text not null,
-          username text not null);
-        ` ;
-        this.db().exec(sql)
+                token text not null,
+                username text not null);
+            ` ;
+        this.db().exec(sql, (err) => {
+            if (err) {
+                let msg: string = this.name() + ": cannot create table 'lostpwd' in UserService" ;
+                xeroDBLoggerLog('ERROR', msg);
+                throw new Error(msg)
+            }
+        });
 
         let roles: string[] = ['admin'];
         this.addUser('admin', 'grond1425', 'Griffin', 'Butch', 'butchg@comcast.net', UserService.stateActive, roles);

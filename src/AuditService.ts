@@ -31,7 +31,7 @@ export class AuditService extends DatabaseService {
             `CREATE TABLE login (
                 username text not null,
                 ipaddr text not null,
-                when text not null,
+                timestamp text not null,
                 action text not null);
             ` ;
         this.db().exec(sql, (err) => {
@@ -46,7 +46,7 @@ export class AuditService extends DatabaseService {
             `CREATE TABLE audit (
                 username text not null,
                 ipaddr text not null,
-                when text not null,
+                timestamp text not null,
                 partno text not null,
                 action text not null);
             ` ;

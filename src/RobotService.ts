@@ -78,7 +78,13 @@ export class RobotService extends DatabaseService {
                 modified text not null,
                 part text not null);
             ` ;
-        this.db().exec(sql);
+            this.db().exec(sql, (err) => {
+                if (err) {
+                    let msg: string = this.name() + ": cannot create table 'robots' in RobotService" ;
+                    xeroDBLoggerLog('ERROR', msg);
+                    throw new Error(msg)
+                }
+            });
 
         sql =
             `CREATE TABLE parts (
@@ -94,7 +100,13 @@ export class RobotService extends DatabaseService {
             attribs text);
         ` ;
 
-        this.db().exec(sql)
+        this.db().exec(sql, (err) => {
+            if (err) {
+                let msg: string = this.name() + ": cannot create table 'parts' in RobotService" ;
+                xeroDBLoggerLog('ERROR', msg);
+                throw new Error(msg)
+            }
+        });
     }
 
     private loadAll() {
