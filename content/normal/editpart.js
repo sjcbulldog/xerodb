@@ -12,6 +12,9 @@ function addOneSelect(attr, lastone, choices, value) {
     label.textContent = attr.key ;
     div.appendChild(label) ;
 
+    var br = document.createElement('br') ;
+    div.appendChild(br);
+
     var select = document.createElement('select');
     select.id = attr.key ;
     select.name = attr.key ;
@@ -65,6 +68,85 @@ function addOneInput(attr, lastone) {
     return div ;
 }
 
+function setStudentOrMentor(data, lastone, name, value, choices) {
+    var parent = lastone.parentElement;
+
+    var div = document.createElement('div') ;
+    var nextone = lastone.nextElementSibling;
+    parent.insertBefore(div, nextone) ;
+
+    let editable = data.admin || (data.student.length == 0 && data.mentor.length == 0) ;
+
+    var label = document.createElement('label') ;
+    label.for = name ;
+    label.textContent = name ;
+    div.appendChild(label) ;
+
+    var br = document.createElement('br') ;
+    div.appendChild(br);
+
+    var select = document.createElement('select');
+    select.id = name ;
+    select.name = name ;
+
+    for(let choice of choices) {
+        let opt = document.createElement('option');
+        opt.value = choice ;
+        opt.innerHTML = choice ;
+        select.appendChild(opt) ;
+    }
+
+    select.value = value ;
+    div.appendChild(select) ;
+
+    if (!editable) {
+        select.disabled = true ;
+    }
+
+    return div ;
+}
+
+function setState(data, lastone) {
+    var parent = lastone.parentElement;
+
+    var div = document.createElement('div') ;
+    var nextone = lastone.nextElementSibling;
+    parent.insertBefore(div, nextone) ;
+
+    var label = document.createElement('label') ;
+    label.for = 'state' ;
+    label.textContent = 'State';
+    div.appendChild(label) ;
+
+    var br = document.createElement('br');
+    div.appendChild(br);
+
+    var select = document.createElement('select');
+    select.id = 'state' ;
+    select.name = 'state' ;
+
+    let opt = document.createElement('option') ;
+    opt.value = data.state ;
+    opt.innerHTML = data.state ;
+    select.appendChild(opt);
+
+    for(let choice of data.nextstates) {
+        opt = document.createElement('option');
+        opt.value = choice ;
+        opt.innerHTML = choice ;
+        select.appendChild(opt) ;
+    }
+
+    select.value = data.state ;
+    div.appendChild(select) ;
+
+    if (data.nextstates.length == 0) {
+        select.disabled = true ;
+    }
+
+    return div ;
+}
+
 function getOnePart() {
     $.getJSON('/robots/partinfo?partno=' + partnovalue, (data) => {
         $.getJSON('/users/withrole?role=mentor', (mentors) => {
@@ -74,6 +156,11 @@ function getOnePart() {
                         $('#partnotext').html('<b>' + data.key + ', ' + data.ntype + '</b>');
 
                         var lastone = document.getElementById('lastone') ;
+
+                        lastone = setState(data, lastone) ;
+                        lastone = setStudentOrMentor(data, lastone, 'student', data.student, students) ;
+                        lastone = setStudentOrMentor(data, lastone, 'mentor', data.mentor, mentors) ;
+
                         for(var attr of data.attribs) {
                             var choices = [] ;
                             if (attr.desc.type === 'mentor') {

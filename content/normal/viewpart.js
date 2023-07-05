@@ -52,12 +52,7 @@ document.addEventListener("DOMContentLoaded", (event) => {
         activate: function (e) {
         },
         dblclick: function (e) {
-            if (e.info.colId === 'state') {
-                window.location.href = "/robots/newstate?partno=" + e.node.key ;
-            }
-            else {
-                window.location.href = "/robots/editpart?partno=" + e.node.key + "&parttype=" + e.node.data.ntype;
-            }
+            window.location.href = "/robots/editpart?partno=" + e.node.key + "&parttype=" + e.node.data.ntype;
         }
     });
 });

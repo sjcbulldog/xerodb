@@ -23,6 +23,8 @@ export class RobotPart {
     robot_ : number ;
     part_ : number;
     state_ : string;
+    student_ : string ;
+    mentor_: string ;
     quantity_ : number ;
     description_ : string ;
     type_ : string;
@@ -42,6 +44,8 @@ export class RobotPart {
         this.username_ = uname ;
         this.created_ = created ;
         this.modified_ = modified ;
+        this.mentor_ = "" ;
+        this.student_ = "" ;
         if (attribs)
             this.attribs_ = attribs ;
         else

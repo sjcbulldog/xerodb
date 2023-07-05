@@ -179,6 +179,8 @@ export class RobotService extends DatabaseService {
             robotid int not null,
             partno int not null,
             state text not null,
+            student text not null,
+            mentor text not null,
             quantity int not null,
             desc text not null,
             type text not null,
@@ -393,6 +395,8 @@ export class RobotService extends DatabaseService {
         let sql: string = 'UPDATE parts SET';
         sql += " desc='" + part.description_ + "',";
         sql += " quantity=" + String(part.quantity_) + ",";
+        sql += " student='" + this.escapeString(part.student_) + "',"
+        sql += " mentor='" + this.escapeString(part.mentor_) + "',"
         sql += " state='" + part.state_ + "'," ;
         sql += " attribs='" + this.escapeString(this.attribMapToString(part.attribs_)) + "'";
         sql += ' WHERE robotid=' + String(part.robot_);
@@ -428,6 +432,8 @@ export class RobotService extends DatabaseService {
         sql += String(robot) + ",";
         sql += String(partno) + ",";
         sql += "'" + state + "'," ;
+        sql += "''," ;                      // student
+        sql += "''," ;                      // mentor
         sql += String(1) + ",";
         sql += "'" + this.escapeString(desc) + "',";
         sql += "'" + type + "',";
@@ -476,6 +482,22 @@ export class RobotService extends DatabaseService {
         return ret;
     }
 
+    private getStates(part: RobotPart): PartState[] {
+        let ret: PartState[] = [];
+
+        if (part.type_ === RobotService.partTypeAssembly) {
+            ret = RobotService.AssemblyStates;
+        }
+        else if (part.type_ === RobotService.partTypeCOTS) {
+            ret = RobotService.COTSStates;
+        }
+        else if (part.type_ === RobotService.partTypeManufactured) {
+            ret = RobotService.ManufacturedStates;
+        }
+
+        return ret;
+    }
+
     private applyAttributes(part: RobotPart) {
         let attribs: PartAttr[] = this.getAttributes(part);
 
@@ -494,8 +516,10 @@ export class RobotService extends DatabaseService {
         type ObjectKey = keyof typeof obj;
         const parentKey = 'parent' as ObjectKey;
         const partnoKey = 'partno' as ObjectKey;
-        const quantityKey = 'quantity' as ObjectKey;
         const stateKey = 'state' as ObjectKey ;
+        const studentKey = 'student' as ObjectKey ;
+        const mentorKey = 'mentor' as ObjectKey ;
+        const quantityKey = 'quantity' as ObjectKey;
         const descKey = 'desc' as ObjectKey;
         const typeKey = 'type' as ObjectKey;
         const usernameKey = 'username' as ObjectKey;
@@ -506,6 +530,8 @@ export class RobotService extends DatabaseService {
         let parent = (obj[parentKey] as unknown) as number;
         let partno = (obj[partnoKey] as unknown) as number;
         let state = (obj[stateKey] as unknown) as string ;
+        let student = (obj[studentKey] as unknown) as string ;
+        let mentor = (obj[mentorKey] as unknown) as string ;
         let quantity = (obj[quantityKey] as unknown) as number;
         let desc = (obj[descKey] as unknown) as string;
         let type = (obj[typeKey] as unknown) as string;
@@ -521,7 +547,16 @@ export class RobotService extends DatabaseService {
             attrlist = this.stringToAttribMap(attribs);
         }
 
+        if (state === 'undefined') {
+            //
+            // A fail safe for bugs to given an out
+            //
+            state = RobotService.stateNew ;
+        }
+
         let retval: RobotPart = new RobotPart(parent, robot, partno, state, quantity, desc, type, username, created, modified, attrlist);
+        retval.student_ = student ;
+        retval.mentor_ = mentor ;
         this.applyAttributes(retval);
 
         return retval;
@@ -530,7 +565,7 @@ export class RobotService extends DatabaseService {
     private async getOnePart(robot: number, partno: number): Promise<RobotPart> {
         let ret: Promise<RobotPart> = new Promise<RobotPart>((resolve, reject) => {
             let retval: RobotPart;
-            let sql = 'select parent, partno, state, quantity, desc, type, username, created, modified, attribs from parts where robotid=' + String(robot) + ' AND partno=' + String(partno);
+            let sql = 'select parent, partno, state, student, mentor, quantity, desc, type, username, created, modified, attribs from parts where robotid=' + String(robot) + ' AND partno=' + String(partno);
             this.db().all(sql, async (err, rows) => {
                 if (rows.length === 0) {
                     reject(new Error('no such record found'));
@@ -549,7 +584,7 @@ export class RobotService extends DatabaseService {
     private async getPartsForRobot(robot: number): Promise<RobotPart[]> {
         let ret: Promise<RobotPart[]> = new Promise<RobotPart[]>((resolve, reject) => {
             let retval: RobotPart[] = [];
-            let sql = 'select parent, partno, state, quantity, desc, type, username, created, modified, attribs from parts where robotid=' + String(robot) + ';';
+            let sql = 'select parent, partno, state, student, mentor, quantity, desc, type, username, created, modified, attribs from parts where robotid=' + String(robot) + ';';
             this.db().all(sql, async (err, rows) => {
                 if (err) {
                     resolve([]);
@@ -607,7 +642,70 @@ export class RobotService extends DatabaseService {
         return ret;
     }
 
-    private partToLoose(part: RobotPart): LooseObject {
+    private findState(part: RobotPart, states : PartState[]) : PartState | null {
+        for(let state of states) {
+            if (state.name_ === part.state_)
+                return state ;
+        }
+
+        return null ;
+    }
+
+    private nextStates(u: User, part: RobotPart) : string[] {
+        let ret: string[] = [] ;
+        let state: PartState | null = this.findState(part, this.getStates(part)) ;
+
+        if (state !== null) {
+            for(let next of state.next_) {
+                let valid: boolean = false ;
+
+                if (u.isAdmin()) {
+                    valid = true ;
+                }
+                else {
+                    switch(next.method_) {
+                        case RobotService.methodAnyone:
+                            valid = true ;
+                            break; 
+
+                        case RobotService.methodAssignedMentor:
+                            if ((part.mentor_.length === 0 && u.isRole('mentor')) || (part.mentor_ === u.username_))
+                            {
+                                valid = true ;
+                            }
+                            break; 
+
+                        case RobotService.methodAssignedStudent:
+                            if (part.student_.length === 0 || part.student_ === u.username_)
+                            {
+                                valid = true ;
+                            }
+                            break ;
+
+                        case RobotService.methodMentor:
+                            if (u.isRole('mentor')) {
+                                valid = true ;
+                            }
+                            break;
+
+                        case RobotService.methodStudent:
+                            if (u.isRole('student')) {
+                                valid = true ;
+                            }
+                            break ;
+                    }
+                }
+
+                if (valid) {
+                    ret.push(next.next_);
+                }
+            }
+        }
+
+        return ret;
+    }
+
+    private partToLoose(u:User | null, part: RobotPart): LooseObject {
         let ret: LooseObject = {};
         let title: string = this.partnoString(part.robot_, part.part_);
         let icon: string;
@@ -639,7 +737,18 @@ export class RobotService extends DatabaseService {
         ret['creator'] = part.username_;
         ret['modified'] = part.modified_;
         ret['quantity'] = part.quantity_;
+        ret['student'] = part.student_ ;
+        ret['mentor'] = part.mentor_ ;
         ret['state'] = part.state_ ;
+
+        if (u === null) {
+            ret['admin'] = false ;
+            ret['nextstates'] = [] ;
+        }
+        else {
+            ret['admin'] = u.isAdmin() ;
+            ret['nextstates'] = this.nextStates(u, part);
+        }
         ret['attribs'] = this.attribMapToArray(part.attribs_, this.getAttributes(part));
 
         if (part.type_ === RobotService.partTypeAssembly) {
@@ -669,7 +778,7 @@ export class RobotService extends DatabaseService {
     private addChildren(obj: LooseObject, parent: number, parts: RobotPart[], depth: number) {
         for (let part of parts) {
             if (part.parent_ === parent) {
-                let child: LooseObject = this.partToLoose(part);
+                let child: LooseObject = this.partToLoose(null, part);
                 this.appendChild(obj, child);
                 if (part.type_ === RobotService.partTypeAssembly && depth < 100) {
                     this.addChildren(child, part.part_, parts, depth + 1);
@@ -683,7 +792,7 @@ export class RobotService extends DatabaseService {
 
         let toppart: RobotPart | null = this.findPartById(id, parts);
         if (toppart !== null) {
-            let top: LooseObject = this.partToLoose(toppart);
+            let top: LooseObject = this.partToLoose(null, toppart);
             ret.push(top);
             this.addChildren(top, id, parts, 1);
         }
@@ -891,8 +1000,19 @@ export class RobotService extends DatabaseService {
 
         let olddesc: string = part.description_ ;
 
+        if (req.body.mentor)
+            part.mentor_ = req.body.mentor ;
+        else
+            part.mentor_ = '' ;
+
+        if (req.body.student)
+            part.student_ = req.body.student ;
+        else
+            part.student_ = '' ;            
+
         part.description_ = req.body.desc;
         part.quantity_ = req.body.quantity;
+        part.state_ = req.body.state ;
 
         for (let attr of this.getAttributes(part)) {
             let val = req.body[attr.name_];
@@ -1023,7 +1143,7 @@ export class RobotService extends DatabaseService {
         }
 
         let part: RobotPart = await this.getOnePart(partno[0], partno[1]);
-        let ret: LooseObject = this.partToLoose(part);
+        let ret: LooseObject = this.partToLoose(u, part);
         res.json(ret);
     }
 
