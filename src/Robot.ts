@@ -51,4 +51,20 @@ export class RobotPart {
         else
             this.attribs_ = new Map<string, string>();
     }
+
+    public clone() : RobotPart {
+        let ret: RobotPart = new RobotPart(this.parent_, this.robot_, this.part_, this.state_, this.quantity_, this.description_, this.type_, this.username_, this.created_, this.modified_, this.cloneAttribs());
+        ret.mentor_ = this.mentor_ ;
+        ret.student_ = this.student_
+
+        return ret;
+    }
+
+    private cloneAttribs() : Map<string, string> {
+        let ret: Map<string, string> = new Map<string, string>() ;
+        for( let [key, value] of this.attribs_) {
+            ret.set(key, value) ;
+        }
+        return ret ;
+    }
 }

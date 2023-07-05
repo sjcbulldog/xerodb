@@ -294,11 +294,63 @@ export class UserService extends DatabaseService {
             }
         });
     }
+
+    private diffRoles(current: string[], prev: string[]) : string {
+        let ret: string = '' ;
+
+        let added: string[] = [] ;
+        for(let role of current) {
+            if (prev.indexOf(role) === -1) {
+                added.push(role) ;
+            }
+        }
+
+        let removed: string[] = [] ;
+        for(let role of prev) {
+            if (current.indexOf(role) === -1) {
+                removed.push(role) ;
+            }
+        }
+
+        if (added.length) {
+            ret += "roles added: " ;
+            let first: boolean = true ;
+            for(let role of added) {
+                if (!first) {
+                    ret += "," ;
+                }
+                else {
+                    first = false ;
+                }            
+                ret += role ;
+            }
+        }
+
+        if (removed.length) {
+            ret += "roles removed: " ;
+            let first: boolean = true ;
+            for(let role of removed) {
+                if (!first) {
+                    ret += "," ;
+                }
+                else {
+                    first = false ;
+                }            
+                ret += role ;
+            }
+        }        
+
+        return ret ;
+    }
     
     private editOneDone(req: Request<{}, any, any, any, Record<string, any>>): Error | null {
         let ret: Error | null = null;
 
         let uch: User | null = this.userFromRequest(req);
+        let lu: string = '*UNKNOWN*' ;
+        if (uch !== null) {
+            lu = uch.username_ ;
+        }
 
         let u: User | null = this.userFromUserName(req.body.username);
         if (u === null) {
@@ -306,6 +358,7 @@ export class UserService extends DatabaseService {
         }
         else {
             if (req.body.password.length > 0) {
+                this.audit_.users(lu, req.socket.remoteAddress, 'user "' + u.username_ + '" password changed');
                 this.changePassword(u, req.body.password);
             }
 
@@ -314,6 +367,8 @@ export class UserService extends DatabaseService {
             }
 
             let oldst: string = u.state_ ;
+            let oldroles: string[] = u.roles_ ;
+            let oldemail: string = u.email_ ;
 
             u.email_ = req.body.email;
             u.firstname_ = req.body.firstname;
@@ -335,8 +390,17 @@ export class UserService extends DatabaseService {
 
             this.updateUser(u);
 
-            if (oldst == UserService.statePending && u.state_ == UserService.stateActive) {
-                this.audit_.users(u.username_, req.socket.remoteAddress, 'user moved from pending to active') ;
+            if (oldst != u.state_) {
+                this.audit_.users(lu, req.socket.remoteAddress, 'user "' + u.username_ + '" state changed "' + oldst.toString() + '"->"' + u.state_.toString() + '"');
+            }
+
+            let diffr: string = this.diffRoles(u.roles_, oldroles) ;
+            if (diffr.length > 0) {
+                this.audit_.users(lu, req.socket.remoteAddress, 'user "' + u.username_ + '" ' + diffr) ;
+            }
+
+            if (oldemail !== u.email_) {
+                this.audit_.users(lu, req.socket.remoteAddress, 'user "' + u.username_ + '" email changed "' + oldemail + '"->"' + u.email_ + '"');
             }
 
             let changer: string = "" ;

@@ -12,7 +12,7 @@ document.addEventListener("DOMContentLoaded", (event) => {
             { id: "username", title: "User Name" , width: "120px" },
             { id: "ipaddr", title: "IP Address" , width: "120px" },
             { id: "timestamp", title: "When" , width: "200px" },
-            { id: "action", title: "Action" },
+            { id: "action", title: "Action"},
         ],
         render: function (e) {
             const node = e.node;

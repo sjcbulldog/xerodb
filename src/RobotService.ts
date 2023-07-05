@@ -233,6 +233,65 @@ export class RobotService extends DatabaseService {
         });
     }
 
+    private diffAttribs(current: Map<string, string>, old: Map<string, string>) : string[] {
+        let ret: string[] = [] ;
+
+        for(let key of old.keys()) {
+            if (!current.has(key)) {
+                ret.push('attribute "' + key + '" removed, old value = "' + old.get(key) + '"');
+            }
+        }
+
+        for(let key of current.keys()) {
+            if (!old.has(key)) {
+                ret.push('attribute "' + key + '" added, value = "' + current.get(key) + '"');
+            }
+        }        
+
+        let changed: string[] = [] ;
+        for(let key of current.keys()) {
+            if (old.has(key)) {
+                if (current.get(key) !== old.get(key)) {
+                    ret.push('attribute "' + key + '" changed, "' + old.get(key) + '"->"' + current.get(key) + '"');
+                }
+            }
+        }         
+
+        return ret;
+    }
+
+    private diffRobotPart(current: RobotPart, old: RobotPart) : string[] {
+        let ret: string[] = [];
+
+        if (current.parent_ !== old.parent_) {
+            ret.push('parent: ' + old.parent_ + '->' + current.parent_);
+        }
+
+        if (current.state_ !== old.state_) {
+            ret.push('state: "' + old.state_ + '"->"' + current.state_ + '"');
+        }
+
+        if (current.student_ !== old.student_) {
+            ret.push('student: "' + old.student_ + '"->"' + current.student_ + '"');
+        }
+
+        if (current.mentor_ !== old.mentor_) {
+            ret.push('mentor: "' + old.mentor_ + '"->"' + current.mentor_ + '"');
+        }
+
+        if (current.quantity_ !== old.quantity_) {
+            ret.push('quantity: ' + old.quantity_ + '->' + current.quantity_);
+        } 
+
+        if (current.description_ !== old.description_) {
+            ret.push('description: "' + old.description_ + '"->"' + current.description_ + '"');
+        }     
+
+        ret.push.apply(this.diffAttribs(current.attribs_, old.attribs_));
+
+        return ret ;
+    }
+
 
     private getPartAttrDescFromSet(descs: PartAttr[], key: string): PartAttr | null {
         for (let desc of descs) {
@@ -391,7 +450,7 @@ export class RobotService extends DatabaseService {
         });
     }
 
-    private async updatePart(u: User, part: RobotPart): Promise<void> {
+    private async updatePart(u: User, part: RobotPart, prev: RobotPart): Promise<void> {
         let sql: string = 'UPDATE parts SET';
         sql += " desc='" + part.description_ + "',";
         sql += " quantity=" + String(part.quantity_) + ",";
@@ -411,7 +470,10 @@ export class RobotService extends DatabaseService {
                         reject(err);
                     }
                     else {
-                        this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(part.robot_, part.part_), part.description_, 'robot part modified');
+                        let diffs: string[] = this.diffRobotPart(part, prev) ;
+                        for(let diff of diffs) {
+                            this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(part.robot_, part.part_), part.description_, diff);
+                        }
                         this.updateRobotModified(part.robot_);
                         resolve();
                     }
@@ -453,7 +515,7 @@ export class RobotService extends DatabaseService {
                     else {
                         xeroDBLoggerLog('INFO', 'UserService: added part "' + this.partnoString(robot, partno) + '" to the database');
                         this.updateRobotModified(robot);
-                        this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(robot, partno), desc, 'created new robot part');
+                        this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(robot, partno), desc, 'created new robot part, type="' + type + '"');
                         resolve();
                     }
                 });
@@ -840,7 +902,7 @@ export class RobotService extends DatabaseService {
 
                 this.nextpart_.set(robotno, 2);
 
-                this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(robotno, 0), desc, "created new robot'" + req.body.name + "', robot number " + robotno);
+                this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(robotno, 0), desc, "created new robot '" + req.body.name + "', robot number " + robotno);
             }
         });
 
@@ -917,6 +979,28 @@ export class RobotService extends DatabaseService {
 
             });
     }
+
+    private async assigned(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        let result: LooseObject[] = [];
+
+        for(let [number, robot] of this.robots_) {
+            await this.getPartsForRobot(robot.id_)
+                .then((partobjs) => {
+                    for(let part of partobjs) {
+                        if (part.student_ === u.username_ || part.mentor_ === u.username_) {
+                            let loose: LooseObject = this.partToLoose(u, part) ;
+                            result.push(loose) ;
+                        }
+                    }
+                })
+                .catch((err) => {
+                    res.json([]);
+                    return ;
+                });
+        }
+
+        res.json(result) ;
+    }    
 
     private async newpart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         if (req.query.parent === undefined) {
@@ -998,21 +1082,21 @@ export class RobotService extends DatabaseService {
             return;
         }
 
+        let oldpart: RobotPart = part.clone() ;
+
         let olddesc: string = part.description_ ;
 
         if (req.body.mentor)
             part.mentor_ = req.body.mentor ;
-        else
-            part.mentor_ = '' ;
 
         if (req.body.student)
             part.student_ = req.body.student ;
-        else
-            part.student_ = '' ;            
+
+        if (req.body.state)
+            part.state_ = req.body.state ;
 
         part.description_ = req.body.desc;
-        part.quantity_ = req.body.quantity;
-        part.state_ = req.body.state ;
+        part.quantity_ = parseInt(req.body.quantity, 10);
 
         for (let attr of this.getAttributes(part)) {
             let val = req.body[attr.name_];
@@ -1021,7 +1105,7 @@ export class RobotService extends DatabaseService {
             }
         }
 
-        this.updatePart(u, part);
+        this.updatePart(u, part, oldpart);
 
         if (olddesc !== part.description_) {
             this.audit_.updatePartDesc(req.body.partno, part.description_);
@@ -1196,6 +1280,10 @@ export class RobotService extends DatabaseService {
         }
         else if (req.path === '/robots/partdata') {
             this.partdata(u, req, res);
+            handled = true;
+        }
+        else if (req.path === '/robots/assigned') {
+            this.assigned(u, req, res);
             handled = true;
         }
         else if (req.path === '/robots/newpart') {
