@@ -1,5 +1,17 @@
 var parttree = null;
 
+function updateCosts() {
+    $.getJSON('/robots/totalcost?partno=' + partno, (data) => {
+        if (data.total !== undefined) {
+            const formatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD'}) ;
+            $("#costs").html('Total Robot Cost: ' + formatter.format(data.total));
+        }
+        else {
+            $("#costs").html('Error Computing Robot Costs') ;
+        }
+    }) ;
+}
+
 document.addEventListener("DOMContentLoaded", (event) => {
     parttree = new mar10.Wunderbaum({
         id: "demo",
@@ -18,6 +30,7 @@ document.addEventListener("DOMContentLoaded", (event) => {
         ],
         load: function (e) {
             e.tree.expandAll();
+            updateCosts() ;
         },
         render: function (e) {
             const node = e.node;
@@ -49,6 +62,8 @@ document.addEventListener("DOMContentLoaded", (event) => {
                     window.location.href = "/robots/copypart?partno=" + e.sourceNode.key + "&parent=" + e.node.key;
                 else 
                     window.location.href = "/robots/reparentpart?partno=" + e.sourceNode.key + "&parent=" + e.node.key;
+
+                updateCosts() ;
             },
         },
         activate: function (e) {

@@ -42,6 +42,8 @@ export class RobotService extends DatabaseService {
     private static readonly methodAssignedStudent = "assigned-student" ;
     private static readonly methodAssignedMentor = "assigned-mentor" ;
 
+    private static readonly unitCostAttribute = 'Unit Cost' ;
+
     private static readonly manufacturing_types_ = [
         "3d Mark Forge Print",
         "3d Stratus Print",
@@ -54,7 +56,7 @@ export class RobotService extends DatabaseService {
         new PartAttr('Vendor Name', PartAttr.TypeStringName, true, ''),
         new PartAttr('Vendor Site', PartAttr.TypeStringName, true, ''),
         new PartAttr('Vendor Part Number', PartAttr.TypeStringName, false, ''),
-        new PartAttr('Cost', PartAttr.TypeDoubleName, false, '0.0'),
+        new PartAttr(RobotService.unitCostAttribute, PartAttr.TypeDoubleName, false, '0.0'),
     ];
 
     private static readonly COTSStates = [
@@ -108,7 +110,7 @@ export class RobotService extends DatabaseService {
 
     private static readonly ManufacturedAttributes = [
         new PartAttr('Method', PartAttr.TypeManufacturingType, false, ''),
-        new PartAttr('Cost', PartAttr.TypeDoubleName, false, '0.0'),
+        new PartAttr(RobotService.unitCostAttribute, PartAttr.TypeDoubleName, false, '0.0'),
     ];
 
     private static readonly ManufacturedStates = [
@@ -1280,6 +1282,49 @@ export class RobotService extends DatabaseService {
         res.json(RobotService.manufacturing_types_);
     }
 
+    private getCost(part: RobotPart, parts: RobotPart[]) : number {
+        let ret: number = 0 ;
+
+        if (part.type_ === RobotService.partTypeAssembly) {
+            for(let other of parts) {
+                if (other.parent_ === part.part_) {
+                    ret += this.getCost(other, parts) ;
+                }
+            }
+        }
+        else {
+            let cost = part.attribs_.get(RobotService.unitCostAttribute) ;
+            if (cost) {
+                ret = parseFloat(cost) ;
+            }
+        }
+
+        return ret * part.quantity_ ;
+    }
+
+    private async totalCost(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        let ret : LooseObject = {} ;
+        if (req.query.partno === undefined) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/viewpart'));
+            return;
+        }
+
+        let partno: number[] = this.stringToPartno(req.query.partno);
+        if (partno.length !== 2) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/viewpart'));
+            return;
+        }
+
+        ret.total = null ;
+
+        let parts: RobotPart[] = await this.getPartsForRobot(partno[0]);
+        let top: RobotPart | null = this.findPartById(1, parts) ;
+
+        ret.total = this.getCost(top!, parts) ;
+
+        res.json(ret) ;
+    }
+
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         xeroDBLoggerLog('DEBUG', "RobotService: rest api '" + req.path + "'");
 
@@ -1347,6 +1392,10 @@ export class RobotService extends DatabaseService {
         else if (req.path === '/robots/mantypes') {
             this.manufacturingtypes(u, req, res);
             handled = true;
+        }
+        else if (req.path === '/robots/totalcost') {
+            this.totalCost(u, req, res);
+            handled = true ;
         }
 
         if (u.isAdmin()) {
