@@ -1000,7 +1000,29 @@ export class RobotService extends DatabaseService {
         }
 
         res.json(result) ;
-    }    
+    }   
+    
+    private async unassigned(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        let result: LooseObject[] = [];
+
+        for(let [number, robot] of this.robots_) {
+            await this.getPartsForRobot(robot.id_)
+                .then((partobjs) => {
+                    for(let part of partobjs) {
+                        if (part.student_.length === 0 || part.mentor_.length === 0) {
+                            let loose: LooseObject = this.partToLoose(u, part) ;
+                            result.push(loose) ;
+                        }
+                    }
+                })
+                .catch((err) => {
+                    res.json([]);
+                    return ;
+                });
+        }
+
+        res.json(result) ;
+    }     
 
     private async newpart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         if (req.query.parent === undefined) {
@@ -1284,6 +1306,10 @@ export class RobotService extends DatabaseService {
         }
         else if (req.path === '/robots/assigned') {
             this.assigned(u, req, res);
+            handled = true;
+        }
+        else if (req.path === '/robots/unassigned') {
+            this.unassigned(u, req, res);
             handled = true;
         }
         else if (req.path === '/robots/newpart') {

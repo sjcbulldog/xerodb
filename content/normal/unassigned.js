@@ -2,16 +2,14 @@ var parttree = null;
 
 document.addEventListener("DOMContentLoaded", (event) => {
     parttree = new mar10.Wunderbaum({
-        id: "assigned",
-        element: document.getElementById("assigned"),
+        id: "unassigned",
+        element: document.getElementById("unassigned"),
         source: {
-            url: "/robots/assigned"
+            url: "/robots/unassigned"
         },
         columns: [
             { id: "*", title: "Part Number", width: "220px" },
             { id: "ntype", title: "Type", width: "110px" },
-            { id: "student", title: "Student", width: "90px" },
-            { id: "mentor", title: "Mentor", width: "90px" },
             { id: "quantity", title: "Quantity", width: "80px" },
             { id: "state", title: "State", width: "140px" },
             { id: "desc", title: "Description", /* width: "400px" */},
