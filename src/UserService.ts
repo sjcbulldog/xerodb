@@ -173,8 +173,6 @@ export class UserService extends DatabaseService {
 
                 sql = 'delete from confirm where token="' + token + '";';
                 this.db().exec(sql);
-
-                this.notify('user-confirmed', 'the user "' + username + '" confirmed there email') ;
             });
         });
     }
@@ -234,7 +232,6 @@ export class UserService extends DatabaseService {
                     xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
                 }
                 else {
-                    this.notify('user-changed-password', 'The user "' + u.username_ + '" changed their password');
                     xeroDBLoggerLog('INFO', 'UserService: updated username "' + u.username_ + '" in the database');
                     u.password_ = hashed;
                 }
@@ -410,7 +407,6 @@ export class UserService extends DatabaseService {
             else {
                 changer = uch.username_ ;
             }
-            this.notify('user-changed', 'The user "' + u.username_ + '" was changed by admin "' + changer + '"');
         }
 
         return ret;
@@ -620,7 +616,6 @@ export class UserService extends DatabaseService {
                         this.sendConfirmationEmail(u);
                     }
                     xeroDBLoggerLog('INFO', 'UserService: added username "' + username + '" to the database');
-                    this.notify('user-added', 'The user "' + username + '" was added');
                 }
             });
         }
@@ -862,7 +857,11 @@ export class UserService extends DatabaseService {
         }
     }
 
-    public notify(activity: string, msg: string) {
+    public getEmailFromUser(user: string) : string | null {
+        if (this.users_.has(user))
+            return this.users_.get(user)!.email_ ;
+
+        return null;
     }
 }
 

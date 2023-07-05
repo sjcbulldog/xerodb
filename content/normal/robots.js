@@ -1,27 +1,84 @@
+
+function notificationChanged(e) {
+    if (e.srcElement) {
+        if (e.srcElement.partno) {
+            if (e.srcElement.checked) {
+                $.getJSON('/robots/notify?partno=' + e.srcElement.partno + '&enabled=true');
+            }
+            else {
+                $.getJSON('/robots/notify?partno=' + e.srcElement.partno + '&enabled=false');                
+            }
+        }
+    }
+    console.log(e);
+}
+
+function createCell(name, bold) {
+    let td = document.createElement('td') ;
+    if (bold) {
+        let b = document.createElement('b') ;
+        b.innerHTML = name ;
+        td.appendChild(b);
+    }
+    else {
+        td.innerHTML = name ;
+    }
+
+    return td ;
+}
+
+function createLinkedCell(name) {
+    let td = document.createElement('td') ;
+    let a = document.createElement('a');
+    td.appendChild(a) ;
+    a.title = 'View Robot' ;
+    a.href = '/robots/viewpart?partno=' + name ;
+    a.innerHTML = name ;
+
+    return td ;
+}
+
+function createNotifiyCell(notify, partno) {
+    let td = document.createElement('td') ;
+    let input = document.createElement('input') ;
+    td.appendChild(input) ;
+    input.type = 'checkbox';
+    input.onclick = notificationChanged ;
+    input.partno = partno ;
+    if (notify) {
+        input.checked = true ;
+    }
+    return td ;
+}
+
 function showAllUsers() {
     $.getJSON('/robots/listall', (data) => {
-        var content = '<table>' ;
-        content += '<tr>' ;
-        content += '<td><b>Robot</b></td>' ;
-        content += '<td><b>Assembly</b></td>'
-        content += '<td><b>Description</b></td>' ;
-        content += '<td><b>Created By</b></td>' ;
-        content += '<td><b>Created</b></td>'
-        content += '<td><b>Last Modified</b></td>'
-        content += '</tr>' ;
+        let table = document.createElement('table') ;
+        let tr = document.createElement('tr');
+
+        table.appendChild(tr) ;
+        tr.appendChild(createCell('Robot', true)) ;
+        tr.appendChild(createCell('Assembly', true)) ;
+        tr.appendChild(createCell('Description', true)) ;
+        tr.appendChild(createCell('Created By', true)) ;
+        tr.appendChild(createCell('Created', true)) ;
+        tr.appendChild(createCell('Last Modified', true)) ;
+        tr.appendChild(createCell('Notifications', true)) ;
 
         for(let robot of data) {
-            content += '<tr>'
-            content += '<td>' + robot.name + '</td>' ;
-            content += '<td><a title="View Robot" href=/robots/viewpart?partno=' + robot.part + '>' + robot.part + '</td>' ;
-            content += '<td>' + robot.description + '</td>' ;
-            content += '<td>' + robot.creator + '</td>' ;
-            content += '<td>' + robot.created + '</td>' ;
-            content += '<td>' + robot.modified + '</td>'
-            content += '</tr>'
+            tr = document.createElement('tr');
+            table.appendChild(tr);
+            tr.appendChild(createCell(robot.name));
+            tr.appendChild(createLinkedCell(robot.part))
+            tr.appendChild(createCell(robot.description));
+            tr.appendChild(createCell(robot.creator));
+            tr.appendChild(createCell(robot.created));
+            tr.appendChild(createCell(robot.modified));
+            tr.appendChild(createNotifiyCell(robot.notify, robot.part));
         }
-        content += '</table>';
-        $('.table').append(content) ;
+
+
+        $('.table').append(table);
     }) ;
 }
 

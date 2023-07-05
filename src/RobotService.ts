@@ -10,6 +10,7 @@ import { PartAttr } from './PartAttr';
 import { DatabaseService } from './DatabaseService';
 import { AuditService } from './AuditService';
 import { NextState, PartState } from './PartState';
+import { sendEmail } from './mail';
 
 //
 // Part numbers
@@ -199,6 +200,19 @@ export class RobotService extends DatabaseService {
                 throw new Error(msg)
             }
         });
+
+        sql =
+            `CREATE TABLE notification (
+                username text not null,
+                robot int not null) ;
+            ` ;
+            this.db().exec(sql, (err) => {
+                if (err) {
+                    let msg: string = this.name() + ": cannot create table 'robots' in RobotService" ;
+                    xeroDBLoggerLog('ERROR', msg);
+                    throw new Error(msg)
+                }
+            });        
     }
 
     private loadAll() {
@@ -207,7 +221,7 @@ export class RobotService extends DatabaseService {
             select id, name, desc, username, created, modified, part from robots;
             `;
         this.db().all(sql, (err, rows) => {
-            rows.forEach(row => {
+            for(let row of rows) {
                 let obj: Object = row as Object;
                 type ObjectKey = keyof typeof obj;
                 const idKey = 'id' as ObjectKey;
@@ -231,8 +245,8 @@ export class RobotService extends DatabaseService {
                 if (this.nextkey_ < id + 1) {
                     this.nextkey_ = id + 1;
                 }
-            })
-        });
+            }
+        }) ;
     }
 
     private diffAttribs(current: Map<string, string>, old: Map<string, string>) : string[] {
@@ -452,6 +466,55 @@ export class RobotService extends DatabaseService {
         });
     }
 
+    private async isNotify(u: string, robot: number) : Promise<boolean> {
+        let ret: Promise<boolean> = new Promise<boolean>(async (resolve, reject) => {
+            let sql = 'select username, robot from notification where robot=' + String(robot) ;
+            await this.db().all(sql, async (err, rows) => {
+                if (!err) {
+                    for (let row of rows) {
+                        let obj: Object = row as Object;
+                        type ObjectKey = keyof typeof obj;
+                        const usernameKey = 'username' as ObjectKey;
+                        const robotKey = 'robot' as ObjectKey;
+                
+                        let username = (obj[usernameKey] as unknown) as string;
+                        if (username === u)
+                            resolve(true) ;
+                    }
+                }
+                resolve(false);
+            });          
+        }) ;
+    return ret;
+    }
+
+    private tellUpdate(username: string, ipaddr: string, partno: string, desc: string, action: string) {
+        this.audit_.parts(username, ipaddr, partno, desc, action);
+
+        let part: number[] = this.stringToPartno(partno) ;
+
+        let msg : string = 'The user "' + username + '" modified part "' + partno + '" - ' + action ;
+        let sql = 'select username, robot from notification where robot=' + String(part[0]) ;
+        this.db().all(sql, async (err, rows) => {
+            if (!err) {
+                for (let row of rows) {
+
+                    let obj: Object = row as Object;
+                    type ObjectKey = keyof typeof obj;
+                    const usernameKey = 'username' as ObjectKey;
+                    const robotKey = 'robot' as ObjectKey;
+            
+                    let username = (obj[usernameKey] as unknown) as string;
+
+                    let email: string | null = this.users_.getEmailFromUser(username);
+                    if (email !== null) {
+                        sendEmail(email, 'XeroDB robot changed', msg);
+                    }
+                }
+            }
+        });        
+    }
+
     private async updatePart(u: User, part: RobotPart, prev: RobotPart): Promise<void> {
         let sql: string = 'UPDATE parts SET';
         sql += " desc='" + part.description_ + "',";
@@ -474,7 +537,7 @@ export class RobotService extends DatabaseService {
                     else {
                         let diffs: string[] = this.diffRobotPart(part, prev) ;
                         for(let diff of diffs) {
-                            this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(part.robot_, part.part_), part.description_, diff);
+                            this.tellUpdate(u.username_, u.ipaddr_, this.partnoString(part.robot_, part.part_), part.description_, diff);
                         }
                         this.updateRobotModified(part.robot_);
                         resolve();
@@ -517,7 +580,7 @@ export class RobotService extends DatabaseService {
                     else {
                         xeroDBLoggerLog('INFO', 'UserService: added part "' + this.partnoString(robot, partno) + '" to the database');
                         this.updateRobotModified(robot);
-                        this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(robot, partno), desc, 'created new robot part, type="' + type + '"');
+                        this.tellUpdate(u.username_, u.ipaddr_, this.partnoString(robot, partno), desc, 'created new robot part, type="' + type + '"');
                         resolve();
                     }
                 });
@@ -900,11 +963,9 @@ export class RobotService extends DatabaseService {
 
                 let r: Robot = new Robot(robotno, req.body.name, req.body.desc, 1, u!.username_, current, current);
                 this.robots_.set(robotno, r);
-                this.users_.notify('robot-added', 'A new robot "' + req.body.name + '" was added by user "' + u.username_ + '"');
-
                 this.nextpart_.set(robotno, 2);
 
-                this.audit_.parts(u.username_, u.ipaddr_, this.partnoString(robotno, 0), desc, "created new robot '" + req.body.name + "', robot number " + robotno);
+                this.tellUpdate(u.username_, u.ipaddr_, this.partnoString(robotno, 0), desc, "created new robot '" + req.body.name + "', robot number " + robotno);
             }
         });
 
@@ -920,6 +981,8 @@ export class RobotService extends DatabaseService {
             nrobot['creator'] = robot.creator_;
             nrobot['created'] = robot.created_;
             nrobot['part'] = this.partnoString(robot.id_, robot.topid_);
+            nrobot['modified'] = robot.modified_ ;
+            nrobot['notify'] = await this.isNotify(u.username_, robot.id_);
             ret.push(nrobot);
         }
 
@@ -1325,6 +1388,50 @@ export class RobotService extends DatabaseService {
         res.json(ret) ;
     }
 
+    private async notify(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        let sql : string ;
+
+        if (req.query.partno === undefined) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/notify'));
+            return;
+        }
+
+        let partno: number[] = this.stringToPartno(req.query.partno);
+        if (partno.length !== 2) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/notify'));
+            return;
+        }
+
+        if (req.query.enabled === undefined) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/notify'));
+            return;
+        }
+
+        if (req.query.enabled === true || req.query.enabled === 'true') {
+            sql = 'INSERT into notification VALUES (' ;
+            sql += "'" + this.escapeString(u.username_) + "'," ;
+            sql += partno[0] + ")" ;
+
+            this.db().exec(sql, (err) => {
+                if (err) {
+                    xeroDBLoggerLog('ERROR', 'RobotService: failed to add notification for robot ' + req.query.partno + ' - ' + err);
+                    xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
+                }
+            });            
+        }
+        else {
+            sql = 'DELETE from notification WHERE robot=' + partno[0] + ';' ;
+            this.db().exec(sql, (err) => {
+                if (err) {
+                    xeroDBLoggerLog('ERROR', 'RobotService: failed to delete notification for robot ' + req.query.partno + ' - ' + err);
+                    xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
+                }
+            });  
+        }
+
+        res.json({});
+    }
+
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         xeroDBLoggerLog('DEBUG', "RobotService: rest api '" + req.path + "'");
 
@@ -1395,6 +1502,10 @@ export class RobotService extends DatabaseService {
         }
         else if (req.path === '/robots/totalcost') {
             this.totalCost(u, req, res);
+            handled = true ;
+        }
+        else if (req.path === '/robots/notify') {
+            this.notify(u, req, res);
             handled = true ;
         }
 

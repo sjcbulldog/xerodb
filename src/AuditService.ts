@@ -15,8 +15,7 @@ export class AuditService extends DatabaseService {
 
     private static readonly confirmString: string = '/users/confirm';
     private static readonly userInfoString: string = '/users/userinfo';
-    private static readonly lostPwdReturnString: string = '/users/lostpwdreturn';
-    
+    private static readonly lostPwdReturnString: string = '/users/lostpwdreturn';   
 
     public static readonly UnknownUserError = "USER_SERVICE_UNKNOWN_USER";
     public static readonly IncorrectPasswordError = "USER_SERVICE_INCORRECT_PASSWORD";
@@ -57,7 +56,20 @@ export class AuditService extends DatabaseService {
                     xeroDBLoggerLog('ERROR', msg);
                     throw new Error(msg)
                 }
-            });     
+            });  
+            
+        sql =
+            `CREATE TABLE notify (
+                email text not null,
+                robot int not null);
+            ` ;
+            this.db().exec(sql, (err) => {
+                if (err) {
+                    let msg: string = this.name() + ": cannot create table 'notify' in AuditService" ;
+                    xeroDBLoggerLog('ERROR', msg);
+                    throw new Error(msg)
+                }
+            });               
     }
 
     public parts(username: string, ipaddr: string, partno: string, desc: string, action: string) {
@@ -104,6 +116,9 @@ export class AuditService extends DatabaseService {
                 xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
             }
         });
+    }
+
+    public addEmailForRobot(email: string, robot: number) {
     }
 
     private async userreport(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
