@@ -178,19 +178,19 @@ export class RobotService extends DatabaseService {
 
         sql =
             `CREATE TABLE parts (
-            parent int not null,
-            robotid int not null,
-            partno int not null,
-            state text not null,
-            student text not null,
-            mentor text not null,
-            quantity int not null,
-            desc text not null,
-            type text not null,
-            username text not null,
-            created text not null,
-            modified text not null, 
-            attribs text);
+                parent int not null,
+                robotid int not null,
+                partno int not null,
+                state text not null,
+                student text not null,
+                mentor text not null,
+                quantity int not null,
+                desc text not null,
+                type text not null,
+                username text not null,
+                created text not null,
+                modified text not null, 
+                attribs text);
         ` ;
 
         this.db().exec(sql, (err) => {
@@ -1202,6 +1202,34 @@ export class RobotService extends DatabaseService {
         res.redirect(url);
     }
 
+    private async deleteOnePart(part: RobotPart, parts: RobotPart[]) : Promise<void> {
+        let ret: Promise<void> = new Promise<void>( async (resolve, reject) => {
+            if (part.type_ == RobotService.partTypeAssembly) {
+                for(let one of parts) {
+                    if (one.parent_ == part.part_) {
+                        //
+                        // This is a child of the assembly we are deleting, delete the children
+                        //
+                        await this.deleteOnePart(one, parts);
+                    }
+                }
+            }
+
+            let sql = 'DELETE from parts WHERE partno=' + part.part_ + ' AND robotid=' + part.robot_ + ';' ;
+            this.db().exec(sql, (err) => {
+                if (err) {
+                    xeroDBLoggerLog('ERROR', 'RobotService: failed to update part (delete)time - ' + err.message);
+                    xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
+                    reject(err);
+                }
+                else {
+                    resolve() ;
+                }
+            });
+        }) ;
+        return ret ;
+    }
+
     private async deletepart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         if (req.query.partno === undefined) {
             res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/delete'));
@@ -1214,16 +1242,10 @@ export class RobotService extends DatabaseService {
             return;
         }
 
-        let sql: string = 'UPDATE parts SET ';
-        sql += 'parent = "0"';
-        sql += ' WHERE robotid=' + String(partno[0]);
-        sql += ' AND partno=' + String(partno[1]);
-        this.db().exec(sql, (err) => {
-            if (err) {
-                xeroDBLoggerLog('ERROR', 'RobotService: failed to update part (delete)time - ' + err.message);
-                xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
-            }
-        });
+        let part: RobotPart = await this.getOnePart(partno[0], partno[1]) ;
+        let parts: RobotPart[] = await this.getPartsForRobot(partno[0]);
+
+        await this.deleteOnePart(part, parts) ;
 
         let url: string = '/robots/viewpart?partno=' + this.partnoString(partno[0], 1);
         res.redirect(url);
@@ -1268,34 +1290,57 @@ export class RobotService extends DatabaseService {
         res.redirect(url);
     }
 
+    private async copyOnePart(u: User, parts: RobotPart[], part: RobotPart, parent: number[]) {
+        let newpartno: number = this.nextpart_.get(parent[0])!
+        this.nextpart_.set(parent[0], newpartno + 1);
+
+        await this.createNewPart(u, parent[1], parent[0], newpartno, RobotService.stateNew, part.type_, part.description_, part.attribs_);
+        let newid : number[] = [ parent[0], newpartno] ;
+
+        if (part.type_ === RobotService.partTypeAssembly) {
+            for(let one of parts) {
+                if (one.parent_ == part.part_) {
+                    //
+                    // This is a child of the assembly we are copying
+                    //
+                    this.copyOnePart(u, parts, one, newid) ;
+                }
+            }
+        }
+    }
+
     private async copypart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
 
         if (req.query.partno === undefined) {
-            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart'));
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/copypart'));
             return;
         }
 
         let partno: number[] = this.stringToPartno(req.query.partno);
         if (partno.length !== 2) {
-            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart'));
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/copypart'));
             return;
         }
 
         if (req.query.parent === undefined) {
-            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart'));
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/copypart'));
             return;
         }
 
         let parentno: number[] = this.stringToPartno(req.query.parent);
         if (parentno.length !== 2) {
-            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart'));
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/copypart'));
             return;
         }
 
-        let newpartno: number = this.nextpart_.get(partno[0])!
-        this.nextpart_.set(partno[0], newpartno + 1);
         let part: RobotPart = await this.getOnePart(partno[0], partno[1]);
-        await this.createNewPart(u, parentno[1], partno[0], newpartno, RobotService.stateNew, part.type_, part.description_, part.attribs_);
+        if (part === null) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/copypart'));
+            return;
+        }
+
+        let parts: RobotPart[] = await this.getPartsForRobot(parentno[0]);
+        await this.copyOnePart(u, parts, part, parentno) ;
 
         let url: string = '/robots/viewpart?partno=' + this.partnoString(partno[0], 1);
         res.redirect(url);
