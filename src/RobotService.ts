@@ -57,7 +57,7 @@ export class RobotService extends DatabaseService {
         new PartAttr('Vendor Name', PartAttr.TypeStringName, true, ''),
         new PartAttr('Vendor Site', PartAttr.TypeStringName, true, ''),
         new PartAttr('Vendor Part Number', PartAttr.TypeStringName, false, ''),
-        new PartAttr(RobotService.unitCostAttribute, PartAttr.TypeDoubleName, false, '0.0'),
+        new PartAttr(RobotService.unitCostAttribute, PartAttr.TypeCurrencyName, false, '0.0'),
     ];
 
     private static readonly COTSStates = [
@@ -111,7 +111,7 @@ export class RobotService extends DatabaseService {
 
     private static readonly ManufacturedAttributes = [
         new PartAttr('Method', PartAttr.TypeManufacturingType, false, ''),
-        new PartAttr(RobotService.unitCostAttribute, PartAttr.TypeDoubleName, false, '0.0'),
+        new PartAttr(RobotService.unitCostAttribute, PartAttr.TypeCurrencyName, false, '0.0'),
     ];
 
     private static readonly ManufacturedStates = [

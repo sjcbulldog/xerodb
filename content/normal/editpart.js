@@ -45,6 +45,7 @@ function addOneInput(attr, lastone) {
     div.appendChild(label) ;
 
     var input = document.createElement('input') ;
+    input.xerodbAttribute = attr.desc.type ;
     if (attr.desc.type === 'string') {
         input.type = 'text' ;
     }
@@ -53,6 +54,12 @@ function addOneInput(attr, lastone) {
     }
     else if (attr.desc.type === 'double') {
         input.type = 'text' ;        
+    }
+    else if (attr.desc.type === 'currency') {
+        input.type = 'text' ;
+    }
+    else {
+        alert('Unknown attribute type in page') ;
     }
 
     if (attr.desc.required) {
@@ -147,6 +154,43 @@ function setState(data, lastone) {
     return div ;
 }
 
+let xeroAttrs = null ;
+
+function doValidate(e) {
+    if (xeroAttrs === null)
+        return ;
+
+    for(var attr of xeroAttrs) {
+        let input = document.getElementById(attr.key) ;
+        if (input) {
+            if (attr.desc.type === 'int') {
+                let v = /^[+-]*[0-9]+$/.test(input.value) ;
+                if (!v) {
+                    alert("The value '" + input.vaule + "' for the field '" + attr.key + "' is not a valid integer") ;
+                    e.preventDefault() ;
+                }
+            }
+            else if (attr.desc.type === 'double') {
+                let v = /^[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$/.test(input.value) ;
+                if (!v) {
+                    alert("The value '" + input.vaule + "' for the field '" + attr.key + "' is not a valid floating point number") ;
+                    e.preventDefault() ;
+                }                
+            }
+            else if (attr.desc.type === 'currency') {
+                if (input.value.startsWith('$')) {
+                    input.value = input.value.substring(1);
+                }
+                let v = /^[0-9]+.?[0-9]+$/.test(input.value) ;
+                if (!v) {
+                    alert("The value '" + input.value + "' for the field '" + attr.key + "' is not a valid currency value") ;
+                    e.preventDefault() ;
+                }
+            }
+        }
+    }
+}
+
 function getOnePart() {
     $.getJSON('/robots/partinfo?partno=' + partnovalue, (data) => {
         $.getJSON('/users/withrole?role=mentor', (mentors) => {
@@ -155,12 +199,16 @@ function getOnePart() {
                     $.getJSON('/robots/alldescs?partno=' + partnovalue, (descs) => {
                         $('#partnotext').html('<b>' + data.key + ', ' + data.ntype + '</b>');
 
+                        let form = document.getElementById('editpartform') ;
+                        form.onsubmit=doValidate ;
+
                         var lastone = document.getElementById('lastone') ;
 
                         lastone = setState(data, lastone) ;
                         lastone = setStudentOrMentor(data, lastone, 'student', data.student, students) ;
                         lastone = setStudentOrMentor(data, lastone, 'mentor', data.mentor, mentors) ;
 
+                        xeroAttrs = data.attribs ;
                         for(var attr of data.attribs) {
                             var choices = [] ;
                             if (attr.desc.type === 'mentor') {

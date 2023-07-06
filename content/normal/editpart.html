@@ -9,7 +9,7 @@
 <body>
     <div class="container">
         <section id="content">
-            <form method="post" action="/robots/editpartdone" enctype="application/x-www-form-urlencoded">
+            <form id="editpartform" method="post" action="/robots/editpartdone" enctype="application/x-www-form-urlencoded">
                 <h1>Edit Part</h1>
                 <div>
                     <p id="partnotext"></p>
@@ -17,7 +17,7 @@
                 <input type="hidden" id="partno" name="partno" value="**EMPTY**">
                 <div id="descidparent">
                     <label for="desc">Description</label>
-                    <input list="descid" type="text" required=true placeholder="Description" id="desc" name="desc" value=""/>
+                    <input list="descid" type="text" required=true placeholder="Description" id="desc" name="desc" value="" autofocus/>
                 </div>
                 <div id="lastone">
                     <label for="quantity">Quantity</label>
