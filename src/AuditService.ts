@@ -5,6 +5,7 @@ import path from 'path';
 import { exit } from 'process';
 import { DatabaseService } from './DatabaseService';
 import { createMessageHtml } from './pagegen';
+import { PartNumber } from './PartNumber';
 
 interface LooseObject {
     [key: string]: any
@@ -72,12 +73,12 @@ export class AuditService extends DatabaseService {
             });               
     }
 
-    public parts(username: string, ipaddr: string, partno: string, desc: string, action: string) {
+    public parts(username: string, ipaddr: string, partno: PartNumber, desc: string, action: string) {
         let sql = 'INSERT INTO audit VALUES (';
         sql += "'" + username + "'," ;
         sql += "'" + ipaddr + "'," ;
         sql += "'" + this.now() + "',";
-        sql += "'" + partno + "'," ;
+        sql += "'" + partno.toString() + "'," ;
         sql += "'" + this.escapeString(desc) + "'," ;
         sql += "'" + this.escapeString(action) + "')" ;
         this.db().exec(sql, (err) => {
