@@ -1,3 +1,5 @@
+import { PartNumber } from "./PartNumber";
+
 export class Robot {
     id_: number ;
     name_ : string ;
@@ -5,13 +7,13 @@ export class Robot {
     creator_: string ;
     created_ : string ;
     modified_ : string ;
-    topid_ : number ;
+    topparts_ : PartNumber[] ;
 
-    constructor(id: number, name: string, desc: string, topid: number, creator: string, created: string, modified: string) {
+    constructor(id: number, name: string, desc: string, topid: PartNumber[], creator: string, created: string, modified: string) {
         this.id_ = id ;
         this.name_ = name ;
         this.description_ = desc ;
-        this.topid_ = topid ;
+        this.topparts_ = topid ;
         this.creator_ = creator ;
         this.created_ = created ;
         this.modified_ = modified ;

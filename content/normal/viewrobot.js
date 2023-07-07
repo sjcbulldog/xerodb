@@ -1,7 +1,7 @@
 var parttree = null;
 
 function updateCosts() {
-    $.getJSON('/robots/totalcost?partno=' + partno, (data) => {
+    $.getJSON('/robots/totalcost?robotid=' + robotid, (data) => {
         if (data.total !== undefined) {
             const formatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD'}) ;
             $("#costs").html('Total Robot Cost: ' + formatter.format(data.total));
@@ -17,7 +17,7 @@ document.addEventListener("DOMContentLoaded", (event) => {
         id: "demo",
         element: document.getElementById("parttree"),
         source: {
-            url: "/robots/partdata?partno=" + partno
+            url: "/robots/robotdata?robotid=" + robotid
         },
         columns: [
             { id: "*", title: "Part Number", width: "220px" },
@@ -86,13 +86,26 @@ document.onkeydown = function (e) {
     if (parttree.activeNode.key) {
         console.log(e.key);
         if (e.key === 'c' || e.key === 'C') {
-            window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=C";
+            window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=C&abbrev=";
         }
         else if (e.key === 'a' || e.key === 'A') {
-            window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=A";
+            let abbrev = '' ;
+            while (true) {
+                abbrev = window.prompt('Enter Abbreviation For This Assembly (leave blank to inherit from parent)');
+                if (abbrev === null) {
+                    return ;
+                }
+
+                if (abbrev.length === 0 || /[a-zA-Z]+/.test(abbrev)) {
+                    break ;
+                }
+
+                alert('Abbreviations for assemblies must be all letters') ;
+            }
+            window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=A&abbrev=" + abbrev ;
         }
         if (e.key === 'm' || e.key === 'M') {
-            window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=M";
+            window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=M&abbrev=";
         }
         else if (e.key === 'Delete') {
             $("#dialog-confirm").html("Are you sure you want to delete this part (" + parttree.activeNode.key + ")?");

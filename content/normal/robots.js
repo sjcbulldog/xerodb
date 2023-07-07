@@ -27,12 +27,12 @@ function createCell(name, bold) {
     return td ;
 }
 
-function createLinkedCell(name) {
+function createLinkedCell(name, id) {
     let td = document.createElement('td') ;
     let a = document.createElement('a');
     td.appendChild(a) ;
-    a.title = 'View Robot' ;
-    a.href = '/robots/viewpart?partno=' + name ;
+    a.title = 'Show Robot Parts';
+    a.href = '/robots/viewrobot?robotid=' + id ;
     a.innerHTML = name ;
 
     return td ;
@@ -58,7 +58,6 @@ function showAllUsers() {
 
         table.appendChild(tr) ;
         tr.appendChild(createCell('Robot', true)) ;
-        tr.appendChild(createCell('Assembly', true)) ;
         tr.appendChild(createCell('Description', true)) ;
         tr.appendChild(createCell('Created By', true)) ;
         tr.appendChild(createCell('Created', true)) ;
@@ -68,8 +67,7 @@ function showAllUsers() {
         for(let robot of data) {
             tr = document.createElement('tr');
             table.appendChild(tr);
-            tr.appendChild(createCell(robot.name));
-            tr.appendChild(createLinkedCell(robot.part))
+            tr.appendChild(createLinkedCell(robot.name, robot.id));
             tr.appendChild(createCell(robot.description));
             tr.appendChild(createCell(robot.creator));
             tr.appendChild(createCell(robot.created));

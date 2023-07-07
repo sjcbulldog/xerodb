@@ -1,7 +1,7 @@
 import { PartNumber } from "./PartNumber";
 
 export class RobotPart {
-    parent_ : PartNumber;
+    parent_ : PartNumber | null ;
     part_ : PartNumber;
     state_ : string;
     student_ : string ;
@@ -14,7 +14,7 @@ export class RobotPart {
     modified_ : string ;
     attribs_ : Map<string, string> ;
 
-    constructor(parent: PartNumber, num: PartNumber, state: string, quantity: number, desc: string, type: string, uname: string, created: string, modified: string, attribs: Map<string, string>) {
+    constructor(parent: PartNumber | null, num: PartNumber, state: string, quantity: number, desc: string, type: string, uname: string, created: string, modified: string, attribs: Map<string, string>) {
         this.parent_ = parent ;
         this.part_ = num ;
         this.state_ = state ;
