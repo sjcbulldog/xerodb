@@ -1,18 +1,39 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <link rel="stylesheet" href="/nologin/login.css">
+    <link rel="stylesheet" href="/nologin/menu.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/pure-min.css" integrity="sha384-X38yfunGUhNzHpBaEBsWLO+A0HDYOQi8ufWDkZ0k9e0eXz/tH3II7uKZ9msv++Ls" crossorigin="anonymous">
+    <style>
+        .custom-restricted-width {
+            /* To limit the menu width to the content of the menu: */
+            display: inline-block;
+            /* Or set the width explicitly: */
+            /* width: 10em; */
+        }
+    </style>
 </head>
 <body>
 
 <div class="container">
     <section id="content">
         <h2 class="title">Menu</h2>
-        <p class="items"><a href="/users/changepassword">Change Password</a></p>
-        <p class="items"><a href="/normal/robots.html">Robots</a></p>
-        <p class="items"><a href="/normal/reports.html">Reports</a></p>
-        <p class="items"><a href="/normal/inventory.html">Inventory</a></p>
-        <p class="items"><a href="/users/logout">Logout</a></p>
+        <ul class="ulclass" style="list-style: none;">
+            <li class="liclass">
+                <a href="/users/changepassword">Change Password</a>
+            </li>
+            <li class="liclass">
+                <a href="/normal/robots.html">Robots</a>
+            </li>
+            <li class="liclass">
+                <a href="/normal/reports.html">Reports</a>
+            </li>
+            <li class="liclass">
+                <a href="/normal/inventory.html">Inventory</a>
+            </li>
+            <li class="liclass">
+                <a href="/users/logout">Logout</a>
+            </li>
+        </ul>
     </section>
 </div>
 </body>

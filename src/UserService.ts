@@ -733,7 +733,7 @@ export class UserService extends DatabaseService {
                 else if (u.state_ === UserService.stateNew) {
                     this.audit_.users(u.username_, u.ipaddr_, "new user tried to log in, sent additional confirmation email to address '" + u.email_ + "'");
                     this.sendConfirmationEmail(u);
-                    res.send(createMessageHtml('New User', 'You have not confirmed you email address.  A new confirmation email has been sent.  Please click the link in the confirmation email to confirm your email address.'));
+                    res.send(createMessageHtml('New User', 'You have not confirmed your email address.  A new confirmation email has been sent.  Please click the link in the confirmation email to confirm your email address.'));
                 }
                 else if (u.state_ === UserService.statePending) {
                     this.audit_.users(u.username_, u.ipaddr_, 'pending user tried to log in');
@@ -751,6 +751,47 @@ export class UserService extends DatabaseService {
                     res.send(createMessageHtml('Invalid Login', msg));
                 }
             }
+            handled = true;
+        }
+        else if (req.path === '/users/rlogin') {
+            let json: LooseObject = {} ;
+
+            let u: User | Error = this.canUserLogin(req.query.username, req.query.password);
+            if (u instanceof User) {
+                if (req.socket.remoteAddress) {
+                    u.ipaddr_ = req.socket.remoteAddress ;
+                }
+                if (u.state_ === UserService.stateActive) {
+                    let data = new Uint8Array(64);
+                    let cookieval = this.getRandomValues(data);
+                    let cookiestr = Buffer.from(cookieval).toString('base64');
+                    json['cookie'] = cookiestr ;
+                    this.audit_.users(u.username_, u.ipaddr_, 'user logged into the system');
+                }
+                else if (u.state_ === UserService.stateDisabled) {
+                    this.audit_.users(u.username_, u.ipaddr_, 'disabled user tried to log in');
+                    json['error'] = 'Your account has been disabled.  Please talk to a mentor about this issue' ;
+                }
+                else if (u.state_ === UserService.stateNew) {
+                    this.audit_.users(u.username_, u.ipaddr_, "new user tried to log in, sent additional confirmation email to address '" + u.email_ + "'");
+                    this.sendConfirmationEmail(u);
+                    json['error'] = 'You have not confirmed your email address.  A new confirmation email has been sent.  Please click the link in the confirmation email to confirm your email address.';
+                }
+                else if (u.state_ === UserService.statePending) {
+                    this.audit_.users(u.username_, u.ipaddr_, 'pending user tried to log in');
+                    json['error'] = 'Your account is pending approval by an administrator of this system.' ;
+                }
+            }
+            else {
+                let err: Error = u as Error;
+                if (err.message == UserService.UserNotActiveError) {
+                    json['error'] = 'the user "' + req.body.username + '" is not active - see a mentor for more details';
+                }
+                else {
+                    json['error'] = 'the user or password given are not valid';
+                }
+            }
+            res.json(json);
             handled = true;
         }
         else if (req.path === '/users/logout') {
