@@ -91,7 +91,29 @@ document.onkeydown = function (e) {
         if (e.key === 'c' || e.key === 'C') {
             window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=C&abbrev=";
         }
-        else if (e.key === 'a' || e.key === 'A') {
+        else if (e.key === 'r' || e.key === 'R') {
+            if (!parttree.activeNode.data.ntype.startsWith('A')) {
+                alert('You can only rename an assembly') ;
+                return ;
+            }
+
+            while (true) {
+                abbrev = window.prompt('Enter Abbreviation For This Assembly (leave blank to inherit from parent)');
+                if (abbrev === null) {
+                    return ;
+                }
+
+                if (abbrev.length === 0 || /^[a-zA-Z]+$/.test(abbrev)) {
+                    break ;
+                }
+
+                alert('Abbreviations for assemblies must be all letters') ;
+            }
+
+            // Rename the assembly name
+            window.location.href = "/robots/rename?partno=" + parttree.activeNode.key + "&abbrev=" + abbrev ;
+
+        } else if (e.key === 'a' || e.key === 'A') {
             let abbrev = '' ;
             while (true) {
                 abbrev = window.prompt('Enter Abbreviation For This Assembly (leave blank to inherit from parent)');
@@ -99,7 +121,7 @@ document.onkeydown = function (e) {
                     return ;
                 }
 
-                if (abbrev.length === 0 || /[a-zA-Z]+/.test(abbrev)) {
+                if (abbrev.length === 0 || /^[a-zA-Z]+$/.test(abbrev)) {
                     break ;
                 }
 

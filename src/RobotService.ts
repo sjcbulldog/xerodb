@@ -546,6 +546,38 @@ export class RobotService extends DatabaseService {
         });        
     }
 
+    private async updatePartNumbers(u: User, part: RobotPart, newnum: PartNumber, newparent: PartNumber): Promise<void> {
+        let sql: string = 'UPDATE parts SET';
+        sql += " partno='" + newnum.toString() + "',";
+        sql += " parent='" + newparent.toString() + "'" ;
+        sql += " WHERE partno='" + part.part_.toString() + "'" ;
+
+        let ret: Promise<void> = new Promise<void>((resolve, reject) => {
+            try {
+                let oldnum: PartNumber = part.part_ ;
+                this.db().exec(sql, (err) => {
+                    if (err) {
+                        xeroDBLoggerLog('ERROR', 'RobotService: failed update to part number "' + part.part_.toString() + '" - ' + err);
+                        xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
+                        reject(err);
+                    }
+                    else {
+                        part.part_ = newnum ;
+                        let action: string = 'updated part number to ' + newnum.toString();
+                        this.tellUpdate(u.username_, u.ipaddr_, oldnum, part.description_, action);
+                        this.updateRobotModified(part.part_.robot_);
+                        resolve();
+                    }
+                });
+            }
+            catch (err) {
+                xeroDBLoggerLog('ERROR', 'createNewPart - sql threw exception');
+            }
+        });
+
+        return ret;
+    }
+
     private async updatePart(u: User, part: RobotPart, prev: RobotPart): Promise<void> {
         if (part.state_ == RobotService.stateUnassigned && part.student_.length > 0 && part.mentor_.length > 0) {
             part.state_ = RobotService.stateAssigned ;
@@ -607,9 +639,9 @@ export class RobotService extends DatabaseService {
         sql += "'" + this.now() + "',";
         sql += "'" + this.escapeString(this.attribMapToString(attribs)) + "')";
 
-        let ret: Promise<void> = new Promise<void>((resolve, reject) => {
+        let ret: Promise<void> = new Promise<void>(async (resolve, reject) => {
             try {
-                this.db().exec(sql, (err) => {
+                await this.db().exec(sql, (err) => {
                     if (err) {
                         xeroDBLoggerLog('ERROR', 'RobotService: failed to add part "' + partno.toString() + '" to the database - ' + err);
                         xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
@@ -710,7 +742,6 @@ export class RobotService extends DatabaseService {
                             max = ptemp.part_ ;
                         }
                     }
-
                     resolve(new PartNumber(temp.robot_, temp.abbrev_, max + 1));
                 }
             });
@@ -995,31 +1026,42 @@ export class RobotService extends DatabaseService {
         return ret ;
     }
 
-    private async copyOnePart(u: User, part: RobotPart, parent: PartNumber, parts: RobotPart[]) {
-        //
-        // So we need a new part number
-        //
-        let newpartno: PartNumber = await this.getNextPartNumber(parent);
+    private async copyOnePart(u: User, part: RobotPart, parent: PartNumber, keep: boolean, parts: RobotPart[]) : Promise<void> {
+        let ret: Promise<void> = new Promise<void>( async (resolve, reject) => {
+            //
+            // So we need a new part number
+            //
+            let newpartno: PartNumber ;
+            
+            if (keep) {
+                newpartno = await this.getNextPartNumber(part.part_);
+            } else {
+                newpartno = await this.getNextPartNumber(parent);
+            }
 
-        //
-        // Make a copy of the part, with the new part number and place it under the given parent
-        //
-        await this.createNewPart(u, parent, newpartno, RobotService.stateUnassigned, part.type_, part.description_, 
-                                this.copyAttributes(part.attribs_), part.student_, part.mentor_);
+            //
+            // Make a copy of the part, with the new part number and place it under the given parent
+            //
+            await this.createNewPart(u, parent, newpartno, RobotService.stateUnassigned, part.type_, part.description_, 
+                                    this.copyAttributes(part.attribs_), part.student_, part.mentor_);
 
-        //
-        // Now, if the part is an assembly, it might have children
-        //
-        if (part.type_ === RobotService.partTypeAssembly) {
-            for(let one of parts) {
-                if (one.parent_ == part.part_) {
-                    //
-                    // This is a child of the assembly we are copying
-                    //
-                    this.copyOnePart(u, one, newpartno, parts);
+            //
+            // Now, if the part is an assembly, it might have children
+            //
+            if (part.type_ === RobotService.partTypeAssembly) {
+                for(let one of parts) {
+                    if (one.parent_ != null && one.parent_.toString() == part.part_.toString()) {
+                        //
+                        // This is a child of the assembly we are copying
+                        //
+                        await this.copyOnePart(u, one, newpartno, false, parts);
+                    }
                 }
             }
-        }
+            resolve() ;
+        });
+
+        return ret;
     }
 
     private async deleteOnePart(part: RobotPart, parts: RobotPart[]) : Promise<void> {
@@ -1374,6 +1416,11 @@ export class RobotService extends DatabaseService {
             return;
         }
 
+        if (part.parent_ === null) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/reparentpart - invalid part number - cannot move top level assembly'));
+            return;
+        }
+
         if (req.query.parent === undefined) {
             res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart - missing query parameters'));
             return;
@@ -1386,7 +1433,8 @@ export class RobotService extends DatabaseService {
         }
 
         let parts: RobotPart[] = await this.getPartsForRobot(partno.robot_);
-        await this.copyOnePart(u, part, parentno, parts) ;
+        let keep: boolean = (part.part_.abbrev_ !== part.parent_.abbrev_);
+        await this.copyOnePart(u, part, parentno, keep, parts) ;
         await this.deleteOnePart(part, parts);
 
         let url: string = '/robots/viewrobot?robotid=' + part.part_.robot_ ;
@@ -1416,6 +1464,11 @@ export class RobotService extends DatabaseService {
             return;
         }
 
+        if (part.parent_ === null) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/reparentpart - invalid part number - cannot copy top level assembly'));
+            return;
+        }
+
         if (req.query.parent === undefined) {
             res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart - missing query parameters'));
             return;
@@ -1428,7 +1481,8 @@ export class RobotService extends DatabaseService {
         }
 
         let parts: RobotPart[] = await this.getPartsForRobot(partno.robot_);
-        await this.copyOnePart(u, part, parentno, parts) ;
+        let keep: boolean = (part.part_.abbrev_ !== part.parent_.abbrev_);
+        await this.copyOnePart(u, part, parentno, keep, parts) ;
 
         let url: string = '/robots/viewrobot?robotid=' + part.part_.robot_ ;
         res.redirect(url);
@@ -1580,6 +1634,70 @@ export class RobotService extends DatabaseService {
         res.json({});
     }
 
+    private async renameOne(u: User, part: RobotPart, abbrev: string, parent: PartNumber, parts: RobotPart[]) : Promise<void> {
+        let ret: Promise<void> = new Promise<void>( async (resolve, reject) => {
+
+            let oldnum: PartNumber = part.part_ ;
+
+            // Rename the parent
+            let temp: PartNumber = new PartNumber(part.part_.robot_, abbrev, 0);
+            let newnum: PartNumber = await this.getNextPartNumber(temp);
+            await this.updatePartNumbers(u, part, newnum, parent);
+
+            if (part.type_ === RobotService.partTypeAssembly) {
+                for(let one of parts) {
+                    if (one.parent_ != null && one.parent_.toString() === oldnum.toString()) {
+                        // This is a child of the part we are renaming
+                        await this.renameOne(u, one, abbrev, newnum, parts);
+                    }
+                }
+            }
+
+            resolve() ;
+        }) ;
+        return ret ;
+    }
+
+    private async rename(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        if (req.query.partno === undefined) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/rename - missing query parameters'));
+            return;
+        }
+
+        let partno: PartNumber | null = PartNumber.fromString(req.query.partno);
+        if (partno === null) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/rename - invalid partno'));
+            return;
+        }
+
+        if (req.query.abbrev === undefined) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/rename - missing query parameters'));
+            return;
+        }
+
+        if (!/^[a-zA-Z]+$/.test(req.query.abbrev)) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/rename - invalid abbrev'));
+            return;
+        }
+
+        let parts: RobotPart[] = await this.getPartsForRobot(partno.robot_);
+        let part: RobotPart | null = this.findPartById(partno, parts);
+        if (part === null) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/rename - invalid partno'));
+            return;
+        }
+
+        if (part.parent_ === null) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/rename - invalid partno, cannot rename top level assemblies'));
+            return;
+        }
+
+        await this.renameOne(u, part, req.query.abbrev, part.parent_, parts);
+
+        let url: string = '/robots/viewrobot?robotid=' + part.part_.robot_ ;
+        res.redirect(url);
+    }
+
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         xeroDBLoggerLog('DEBUG', "RobotService: rest api '" + req.path + "'");
 
@@ -1654,6 +1772,10 @@ export class RobotService extends DatabaseService {
         }
         else if (req.path === '/robots/notify') {
             this.notify(u, req, res);
+            handled = true ;
+        }
+        else if (req.path === '/robots/rename') {
+            this.rename(u, req, res);
             handled = true ;
         }
 
