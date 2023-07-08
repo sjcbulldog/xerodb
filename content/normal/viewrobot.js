@@ -20,7 +20,7 @@ document.addEventListener("DOMContentLoaded", (event) => {
             url: "/robots/robotdata?robotid=" + robotid
         },
         columns: [
-            { id: "*", title: "Part Number", width: "220px" },
+            { id: "*", title: "Part Number", width: "300px" },
             { id: "student", title: "Student", width: "90px" },
             { id: "mentor", title: "Mentor", width: "90px" },
             { id: "ntype", title: "Type", width: "110px" },
@@ -70,7 +70,10 @@ document.addEventListener("DOMContentLoaded", (event) => {
         },
         dblclick: function (e) {
             window.location.href = "/robots/editpart?partno=" + e.node.key + "&parttype=" + e.node.data.ntype;
-        }
+        },
+        enhanceTitle: function (e) {
+            e.titleSpan.title = e.node.data.desc ;
+        },
     });
 });
 
@@ -108,6 +111,11 @@ document.onkeydown = function (e) {
             window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=M&abbrev=";
         }
         else if (e.key === 'Delete') {
+            if (parttree.activeNode.key === '001-COMP-00001' || parttree.activeNode.key === '001-PRAC-00001') {
+                alert('You cannot delete the top most comp bot or practice bot.');
+                return ;
+            }
+
             $("#dialog-confirm").html("Are you sure you want to delete this part (" + parttree.activeNode.key + ")?");
 
             // Define the Dialog and its properties.

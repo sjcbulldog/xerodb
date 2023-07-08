@@ -1,5 +1,3 @@
-const dblmsg = 'Double Click To Edit' ;
-
 function addOneSelect(attr, lastone, choices, value) {
     var parent = lastone.parentElement;
 
@@ -131,6 +129,16 @@ function setState(data, lastone) {
     var select = document.createElement('select');
     select.id = 'state' ;
     select.name = 'state' ;
+
+    if (data.mentor.length === 0 && data.student.length === 0) {
+        select.title = 'Assign a student and mentor to move from unassigned state' ;
+    }
+    else if (data.nextstates.length === 0) {
+        select.title = 'You cannot change the state' ;
+    }
+    else {
+        select.title = 'Change State' ;
+    }
 
     let opt = document.createElement('option') ;
     opt.value = data.state ;

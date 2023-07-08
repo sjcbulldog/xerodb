@@ -14,31 +14,23 @@ import { AuditService } from './AuditService';
 import { NextState, PartState } from './PartState';
 import { sendEmail } from './mail';
 
-//
-// Part numbers
-//   RRRR PPPPPP
-//   Robot Number - three digits (0-9)
-//   Part Number - six digits (0-9)
-//
-
 interface LooseObject {
     [key: string]: any
 };
 
 export class RobotService extends DatabaseService {
     private static readonly robotFileName: string = 'robot.db';
-    private static readonly lettersString: string = 'abcdefghijklmnopqrstuvwxzyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    private static readonly numbersString: string = '0123456789';
     private static readonly partTypeCOTS: string = 'C';
     private static readonly partTypeAssembly: string = 'A';
     private static readonly partTypeManufactured: string = 'M';
 
-    private static readonly stateNew: string = "new" ;
+    private static readonly stateUnassigned: string = "Unassigned" ;
+    private static readonly stateAssigned: string = "Assigned" ;
+    private static readonly stateRequested: string = "Requested" ;
+    private static readonly stateOrdered: string = "Ordered" ;
     private static readonly stateDone: string = "Done" ;
 
-    private static readonly robotNumberLength: number = 3;
-    private static readonly partNumberLength: number = 4;
-
+    private static readonly methodAssignStudentAndMentor = "assign-to" ;
     private static readonly methodStudent = "student" ;
     private static readonly methodMentor = "mentor" ;
     private static readonly methodAnyone = "anyone" ;
@@ -65,25 +57,54 @@ export class RobotService extends DatabaseService {
     ];
 
     private static readonly COTSStates = [
-        // States: new, requested, ordered, complete
-        new PartState(RobotService.stateNew, 
+        //
+        // The part has not been assigned to a student and a mentor.  It cannot
+        // change states by the state select.  The student and mentor needs to be
+        // assigned.
+        //
+        new PartState(RobotService.stateUnassigned, 
             [
-                new NextState('requested', RobotService.methodAssignedStudent)
             ]),
-        new PartState('requested',
+        //
+        // The student has requested that the part be ordered by the mentor.
+        // The state changes from assigned -> requested
+        //
+        new PartState(RobotService.stateAssigned, 
             [
-                new NextState('ordered', RobotService.methodMentor),
+                new NextState(RobotService.stateRequested, RobotService.methodStudent),
+            ]),
+        
+        //
+        // The mentor has ordered the part, the state changes from requested -> ordered
+        // Also, if the part already is here in inventory, the mentor can change the part
+        // to done.
+        //
+        new PartState(RobotService.stateRequested,
+            [
+                new NextState(RobotService.stateOrdered, RobotService.methodMentor),
                 new NextState(RobotService.stateDone, RobotService.methodMentor)
             ]),
-        new PartState('ordered',
+
+        //
+        // The part is in the ordered state and has arrived.  The state can be changed
+        // to the done state.  A mentor can also move the part back
+        //
+        new PartState(RobotService.stateOrdered,
             [
-                new NextState(RobotService.stateDone, RobotService.methodAnyone)
+                new NextState(RobotService.stateDone, RobotService.methodAnyone),
+                new NextState(RobotService.stateAssigned, RobotService.methodMentor),
+                new NextState(RobotService.stateRequested, RobotService.methodMentor)
             ]),
+
+        //
+        // The part is in the done state.  If something is wrong a mentor can move it
+        // back to a previous state.
+        //
         new PartState(RobotService.stateDone,
             [
-                new NextState('new', RobotService.methodMentor),
-                new NextState('ordered', RobotService.methodMentor),
-                new NextState('requested', RobotService.methodMentor)
+                new NextState(RobotService.stateAssigned, RobotService.methodMentor),
+                new NextState(RobotService.stateOrdered, RobotService.methodMentor),
+                new NextState(RobotService.stateRequested, RobotService.methodMentor)
             ]),
     ] ;
 
@@ -92,7 +113,7 @@ export class RobotService extends DatabaseService {
 
     private static readonly AssemblyStates = [
         // States: new, requested, ordered, complete
-        new PartState(RobotService.stateNew, 
+        new PartState(RobotService.stateUnassigned, 
             [
                 new NextState('requested', RobotService.methodAssignedStudent)
             ]),
@@ -120,7 +141,7 @@ export class RobotService extends DatabaseService {
 
     private static readonly ManufacturedStates = [
         // States: new, requested, ordered, complete
-        new PartState(RobotService.stateNew, 
+        new PartState(RobotService.stateUnassigned, 
             [
                 new NextState('requested', RobotService.methodAssignedStudent)
             ]),
@@ -526,6 +547,10 @@ export class RobotService extends DatabaseService {
     }
 
     private async updatePart(u: User, part: RobotPart, prev: RobotPart): Promise<void> {
+        if (part.state_ == RobotService.stateUnassigned && part.student_.length > 0 && part.mentor_.length > 0) {
+            part.state_ = RobotService.stateAssigned ;
+        }
+
         let sql: string = 'UPDATE parts SET';
         sql += " desc='" + part.description_ + "',";
         sql += " quantity=" + String(part.quantity_) + ",";
@@ -533,7 +558,7 @@ export class RobotService extends DatabaseService {
         sql += " mentor='" + this.escapeString(part.mentor_) + "',"
         sql += " state='" + part.state_ + "'," ;
         sql += " attribs='" + this.escapeString(this.attribMapToString(part.attribs_)) + "'";
-        sql += " AND partno='" + part.part_.toString() + "'" ;
+        sql += " WHERE partno='" + part.part_.toString() + "'" ;
 
         let ret: Promise<void> = new Promise<void>((resolve, reject) => {
             try {
@@ -561,7 +586,8 @@ export class RobotService extends DatabaseService {
         return ret;
     }
 
-    private async createNewPart(u: User, parent: PartNumber | null, partno: PartNumber, state: string, type: string, desc: string, attribs: Map<string, string>): Promise<void> {
+    private async createNewPart(u: User, parent: PartNumber | null, partno: PartNumber, state: string, type: string, desc: string, 
+                                    attribs: Map<string, string>, student: string, mentor: string): Promise<void> {
         let sql = 'INSERT INTO parts VALUES (';
         if (parent === null) {
             sql += "null," ;
@@ -571,9 +597,9 @@ export class RobotService extends DatabaseService {
         }
         sql += "'" + partno.toString() + "',";
         sql += "'" + state + "'," ;
-        sql += "''," ;                                      // student
-        sql += "''," ;                                      // mentor
-        sql += String(1) + ",";                             // quantity
+        sql += "'" + student + "'," ;
+        sql += "'" + mentor + "'," ;
+        sql += String(1) + ",";
         sql += "'" + this.escapeString(desc) + "',";
         sql += "'" + type + "',";
         sql += "'" + u.username_ + "',";
@@ -733,7 +759,7 @@ export class RobotService extends DatabaseService {
             //
             // A fail safe for bugs to given an out
             //
-            state = RobotService.stateNew ;
+            state = RobotService.stateUnassigned ;
         }
 
         let parentNum: PartNumber | null = null ;
@@ -959,6 +985,71 @@ export class RobotService extends DatabaseService {
         return ret;
     }
 
+    private copyAttributes(attribs: Map<string, string>) : Map<string, string> {
+        let ret : Map<string, string> = new Map<string, string>() ;
+
+        for(let [key, value] of attribs) {
+            ret.set(key, value) ;
+        }
+
+        return ret ;
+    }
+
+    private async copyOnePart(u: User, part: RobotPart, parent: PartNumber, parts: RobotPart[]) {
+        //
+        // So we need a new part number
+        //
+        let newpartno: PartNumber = await this.getNextPartNumber(parent);
+
+        //
+        // Make a copy of the part, with the new part number and place it under the given parent
+        //
+        await this.createNewPart(u, parent, newpartno, RobotService.stateUnassigned, part.type_, part.description_, 
+                                this.copyAttributes(part.attribs_), part.student_, part.mentor_);
+
+        //
+        // Now, if the part is an assembly, it might have children
+        //
+        if (part.type_ === RobotService.partTypeAssembly) {
+            for(let one of parts) {
+                if (one.parent_ == part.part_) {
+                    //
+                    // This is a child of the assembly we are copying
+                    //
+                    this.copyOnePart(u, one, newpartno, parts);
+                }
+            }
+        }
+    }
+
+    private async deleteOnePart(part: RobotPart, parts: RobotPart[]) : Promise<void> {
+        let ret: Promise<void> = new Promise<void>( async (resolve, reject) => {
+            if (part.type_ == RobotService.partTypeAssembly) {
+                for(let one of parts) {
+                    if (one.parent_ !== null && one.parent_.toString() === part.part_.toString()) {
+                        //
+                        // This is a child of the assembly we are deleting, delete the children
+                        //
+                        await this.deleteOnePart(one, parts);
+                    }
+                }
+            }
+
+            let sql = "DELETE from parts WHERE partno='" + part.part_.toString() + "';" ;
+            this.db().exec(sql, (err) => {
+                if (err) {
+                    xeroDBLoggerLog('ERROR', 'RobotService: failed to update part (delete)time - ' + err.message);
+                    xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
+                    reject(err);
+                }
+                else {
+                    resolve() ;
+                }
+            });
+        }) ;
+        return ret ;
+    }
+
     private async newrobot(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         //
         // Create a new top level robot subsystem for the parts database, 
@@ -973,8 +1064,8 @@ export class RobotService extends DatabaseService {
         let desc: string = 'Top Level Robot Subsystem' ;
         let comppart: PartNumber = await this.getNextPartNumber(new PartNumber(robotno, 'COMP', 0)) ;
         let pracpart: PartNumber = await this.getNextPartNumber(new PartNumber(robotno, 'PRAC', 0)) ;
-        await this.createNewPart(u, null, comppart, RobotService.stateNew, RobotService.partTypeAssembly, "Competition Robot Top Assembly", attribs);
-        await this.createNewPart(u, null, pracpart, RobotService.stateNew, RobotService.partTypeAssembly, "Practice Robot Top Assembly", attribs);
+        await this.createNewPart(u, null, comppart, RobotService.stateUnassigned, RobotService.partTypeAssembly, "Competition Robot Top Assembly", attribs, '', '');
+        await this.createNewPart(u, null, pracpart, RobotService.stateUnassigned, RobotService.partTypeAssembly, "Practice Robot Top Assembly", attribs, '', '');
 
         let current = this.now();
 
@@ -1083,49 +1174,49 @@ export class RobotService extends DatabaseService {
             });
     }
 
-    // private async assigned(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
-    //     let result: LooseObject[] = [];
+    private async assigned(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        let result: LooseObject[] = [];
 
-    //     for(let [number, robot] of this.robots_) {
-    //         await this.getPartsForRobot(robot.id_)
-    //             .then((partobjs) => {
-    //                 for(let part of partobjs) {
-    //                     if (part.student_ === u.username_ || part.mentor_ === u.username_) {
-    //                         let loose: LooseObject = this.partToLoose(u, part) ;
-    //                         result.push(loose) ;
-    //                     }
-    //                 }
-    //             })
-    //             .catch((err) => {
-    //                 res.json([]);
-    //                 return ;
-    //             });
-    //     }
+        for(let [number, robot] of this.robots_) {
+            await this.getPartsForRobot(robot.id_)
+                .then((partobjs) => {
+                    for(let part of partobjs) {
+                        if (part.student_ === u.username_ || part.mentor_ === u.username_) {
+                            let loose: LooseObject = this.partToLoose(u, part) ;
+                            result.push(loose) ;
+                        }
+                    }
+                })
+                .catch((err) => {
+                    res.json([]);
+                    return ;
+                });
+        }
 
-    //     res.json(result) ;
-    // }   
+        res.json(result) ;
+    }   
     
-    // private async unassigned(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
-    //     let result: LooseObject[] = [];
+    private async unassigned(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        let result: LooseObject[] = [];
 
-    //     for(let [number, robot] of this.robots_) {
-    //         await this.getPartsForRobot(robot.id_)
-    //             .then((partobjs) => {
-    //                 for(let part of partobjs) {
-    //                     if (part.student_.length === 0 || part.mentor_.length === 0) {
-    //                         let loose: LooseObject = this.partToLoose(u, part) ;
-    //                         result.push(loose) ;
-    //                     }
-    //                 }
-    //             })
-    //             .catch((err) => {
-    //                 res.json([]);
-    //                 return ;
-    //             });
-    //     }
+        for(let [number, robot] of this.robots_) {
+            await this.getPartsForRobot(robot.id_)
+                .then((partobjs) => {
+                    for(let part of partobjs) {
+                        if (part.student_.length === 0 || part.mentor_.length === 0) {
+                            let loose: LooseObject = this.partToLoose(u, part) ;
+                            result.push(loose) ;
+                        }
+                    }
+                })
+                .catch((err) => {
+                    res.json([]);
+                    return ;
+                });
+        }
 
-    //     res.json(result) ;
-    // }     
+        res.json(result) ;
+    }     
 
     private async newpart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         if (req.query.parent === undefined) {
@@ -1160,7 +1251,7 @@ export class RobotService extends DatabaseService {
         if (req.query.abbrev && req.query.abbrev.length > 0)
             abbrev = req.query.abbrev ;
         let newpartno: PartNumber = await this.getNextPartNumber(new PartNumber(parent.robot_, abbrev, 0)) ;
-        await this.createNewPart(u, parent, newpartno, RobotService.stateNew, type, RobotService.doubleClickMessage, attribs) ;
+        await this.createNewPart(u, parent, newpartno, RobotService.stateUnassigned, type, RobotService.doubleClickMessage, attribs, '', '') ;
 
         let url: string = '/robots/viewrobot?robotid=' + parent.robot_ ;
         res.redirect(url);
@@ -1180,16 +1271,17 @@ export class RobotService extends DatabaseService {
 
         let vars: Map<string, string> = new Map<string, string>();
         vars.set('$$$PARTNO$$$', req.query.partno);
+        vars.set('$$$DOUBLECLK$$$', RobotService.doubleClickMessage);
         res.send(processPage(vars, '/normal/editpart.html'));
     }
 
     private async editpartdone(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
-        if (req.query.partno === undefined) {
+        if (req.body.partno === undefined) {
             res.send(createMessageHtml('Error', 'invalid api REST request /robots/editpartdone - missing query parameters'));
             return;
         }
 
-        let partno: PartNumber | null = PartNumber.fromString(req.query.partno) ;
+        let partno: PartNumber | null = PartNumber.fromString(req.body.partno) ;
         if (partno === null) {
             res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/editpartdone - invalid part number'));
             return;
@@ -1234,149 +1326,113 @@ export class RobotService extends DatabaseService {
         res.redirect(url);
     }
 
-    // private async deleteOnePart(part: RobotPart, parts: RobotPart[]) : Promise<void> {
-    //     let ret: Promise<void> = new Promise<void>( async (resolve, reject) => {
-    //         if (part.type_ == RobotService.partTypeAssembly) {
-    //             for(let one of parts) {
-    //                 if (one.parent_ == part.part_) {
-    //                     //
-    //                     // This is a child of the assembly we are deleting, delete the children
-    //                     //
-    //                     await this.deleteOnePart(one, parts);
-    //                 }
-    //             }
-    //         }
+    private async deletepart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        if (req.query.partno === undefined) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/delete - missing query parameters'));
+            return;
+        }
 
-    //         let sql = 'DELETE from parts WHERE partno=' + part.part_ + ' AND robotid=' + part.robot_ + ';' ;
-    //         this.db().exec(sql, (err) => {
-    //             if (err) {
-    //                 xeroDBLoggerLog('ERROR', 'RobotService: failed to update part (delete)time - ' + err.message);
-    //                 xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
-    //                 reject(err);
-    //             }
-    //             else {
-    //                 resolve() ;
-    //             }
-    //         });
-    //     }) ;
-    //     return ret ;
-    // }
+        let partno: PartNumber | null = PartNumber.fromString(req.query.partno) ;
+        if (partno === null) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/editpartdone - invalid part number'));
+            return;
+        }
 
-    // private async deletepart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
-    //     if (req.query.partno === undefined) {
-    //         res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/delete'));
-    //         return;
-    //     }
+        let part: RobotPart | null = await this.getOnePart(partno);
+        if (part === null) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/editpartdone - invalid part number'));
+            return;
+        }
 
-    //     let partno: number[] = this.stringToPartno(req.query.partno);
-    //     if (partno.length !== 2) {
-    //         res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/delete'));
-    //         return;
-    //     }
+        let parts: RobotPart[] = await this.getPartsForRobot(partno.robot_);
 
-    //     let part: RobotPart = await this.getOnePart(partno[0], partno[1]) ;
-    //     let parts: RobotPart[] = await this.getPartsForRobot(partno[0]);
+        await this.deleteOnePart(part, parts) ;
 
-    //     await this.deleteOnePart(part, parts) ;
+        let url: string = '/robots/viewrobot?robotid=' + partno.robot_;
+        res.redirect(url);
+    }
 
-    //     let url: string = '/robots/viewpart?partno=' + this.partnoString(partno[0], 1);
-    //     res.redirect(url);
-    // }
+    private async reparentpart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        //
+        // We are moving the part given by partno to have a new parent the parent given by parentno
+        //
 
-    // private async reparentpart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        if (req.query.partno === undefined) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/reparentpart - missing query parameters'));
+            return;
+        }
 
-    //     if (req.query.partno === undefined) {
-    //         res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart'));
-    //         return;
-    //     }
+        let partno: PartNumber | null = PartNumber.fromString(req.query.partno) ;
+        if (partno === null) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart - invalid part number'));
+            return;
+        }
 
-    //     let partno: number[] = this.stringToPartno(req.query.partno);
-    //     if (partno.length !== 2) {
-    //         res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart'));
-    //         return;
-    //     }
+        let part: RobotPart | null = await this.getOnePart(partno);
+        if (part === null) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/reparentpart - invalid part number'));
+            return;
+        }
 
-    //     if (req.query.parent === undefined) {
-    //         res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart'));
-    //         return;
-    //     }
+        if (req.query.parent === undefined) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart - missing query parameters'));
+            return;
+        }
 
-    //     let parentno: number[] = this.stringToPartno(req.query.parent);
-    //     if (parentno.length !== 2) {
-    //         res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart'));
-    //         return;
-    //     }
+        let parentno: PartNumber | null = PartNumber.fromString(req.query.parent) ;
+        if (parentno === null) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart - invalid part number'));
+            return;
+        }
 
-    //     let sql: string = 'UPDATE parts SET ';
-    //     sql += 'parent = ' + String(parentno[1]);
-    //     sql += ' WHERE robotid=' + String(partno[0]);
-    //     sql += ' AND partno=' + String(partno[1]);
-    //     this.db().exec(sql, (err) => {
-    //         if (err) {
-    //             xeroDBLoggerLog('ERROR', 'RobotService: failed to update part (delete)time - ' + err.message);
-    //             xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
-    //         }
-    //     });
+        let parts: RobotPart[] = await this.getPartsForRobot(partno.robot_);
+        await this.copyOnePart(u, part, parentno, parts) ;
+        await this.deleteOnePart(part, parts);
 
-    //     let url: string = '/robots/viewpart?partno=' + this.partnoString(partno[0], 1);
-    //     res.redirect(url);
-    // }
+        let url: string = '/robots/viewrobot?robotid=' + part.part_.robot_ ;
+        res.redirect(url);
+    }
 
-    // private async copyOnePart(u: User, parts: RobotPart[], part: RobotPart, parent: number[]) {
-    //     let newpartno: number = this.nextpart_.get(parent[0])!
-    //     this.nextpart_.set(parent[0], newpartno + 1);
+    private async copypart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
 
-    //     await this.createNewPart(u, parent[1], parent[0], newpartno, RobotService.stateNew, part.type_, part.description_, part.attribs_);
-    //     let newid : number[] = [ parent[0], newpartno] ;
+        //
+        // We are copying the part given by partno to have a new parent the parent given by parentno
+        //
 
-    //     if (part.type_ === RobotService.partTypeAssembly) {
-    //         for(let one of parts) {
-    //             if (one.parent_ == part.part_) {
-    //                 //
-    //                 // This is a child of the assembly we are copying
-    //                 //
-    //                 this.copyOnePart(u, parts, one, newid) ;
-    //             }
-    //         }
-    //     }
-    // }
+        if (req.query.partno === undefined) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/reparentpart - missing query parameters'));
+            return;
+        }
 
-    // private async copypart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        let partno: PartNumber | null = PartNumber.fromString(req.query.partno) ;
+        if (partno === null) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart - invalid part number'));
+            return;
+        }
 
-    //     if (req.query.partno === undefined) {
-    //         res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/copypart'));
-    //         return;
-    //     }
+        let part: RobotPart | null = await this.getOnePart(partno);
+        if (part === null) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/reparentpart - invalid part number'));
+            return;
+        }
 
-    //     let partno: number[] = this.stringToPartno(req.query.partno);
-    //     if (partno.length !== 2) {
-    //         res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/copypart'));
-    //         return;
-    //     }
+        if (req.query.parent === undefined) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart - missing query parameters'));
+            return;
+        }
 
-    //     if (req.query.parent === undefined) {
-    //         res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/copypart'));
-    //         return;
-    //     }
+        let parentno: PartNumber | null = PartNumber.fromString(req.query.parent) ;
+        if (parentno === null) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/reparentpart - invalid part number'));
+            return;
+        }
 
-    //     let parentno: number[] = this.stringToPartno(req.query.parent);
-    //     if (parentno.length !== 2) {
-    //         res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/copypart'));
-    //         return;
-    //     }
+        let parts: RobotPart[] = await this.getPartsForRobot(partno.robot_);
+        await this.copyOnePart(u, part, parentno, parts) ;
 
-    //     let part: RobotPart = await this.getOnePart(partno[0], partno[1]);
-    //     if (part === null) {
-    //         res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/copypart'));
-    //         return;
-    //     }
-
-    //     let parts: RobotPart[] = await this.getPartsForRobot(parentno[0]);
-    //     await this.copyOnePart(u, parts, part, parentno) ;
-
-    //     let url: string = '/robots/viewpart?partno=' + this.partnoString(partno[0], 1);
-    //     res.redirect(url);
-    // }    
+        let url: string = '/robots/viewrobot?robotid=' + part.part_.robot_ ;
+        res.redirect(url);
+    }    
 
     private async partinfo(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         if (req.query.partno === undefined) {
@@ -1425,93 +1481,104 @@ export class RobotService extends DatabaseService {
         res.json(RobotService.manufacturing_types_);
     }
 
-    // private getCost(part: RobotPart, parts: RobotPart[]) : number {
-    //     let ret: number = 0 ;
+    private getCost(part: RobotPart, parts: RobotPart[]) : number {
+        let ret: number = 0 ;
 
-    //     if (part.type_ === RobotService.partTypeAssembly) {
-    //         for(let other of parts) {
-    //             if (other.parent_ === part.part_) {
-    //                 ret += this.getCost(other, parts) ;
-    //             }
-    //         }
-    //     }
-    //     else {
-    //         let cost = part.attribs_.get(RobotService.unitCostAttribute) ;
-    //         if (cost) {
-    //             ret = parseFloat(cost) ;
-    //         }
-    //     }
+        if (part.type_ === RobotService.partTypeAssembly) {
+            for(let other of parts) {
+                if (other.parent_ !== null && other.parent_.toString() === part.part_.toString()) {
+                    ret += this.getCost(other, parts) ;
+                }
+            }
+        }
+        else {
+            let cost = part.attribs_.get(RobotService.unitCostAttribute) ;
+            if (cost) {
+                ret = parseFloat(cost) ;
+            }
+        }
 
-    //     return ret * part.quantity_ ;
-    // }
+        return ret * part.quantity_ ;
+    }
 
     private async totalCost(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
-        let ret : LooseObject = {} ;
-        // if (req.query.robotid === undefined) {
-        //     res.send(createMessageHtml('Error', 'invalid api REST request /robots/viewpart'));
-        //     return;
-        // }
+        let ret : LooseObject = { total: null } ;
+        if (req.query.robotid === undefined) {
+            res.json(ret);
+            return;
+        }
 
-        // let partno: number[] = this.stringToPartno(req.query.partno);
-        // if (partno.length !== 2) {
-        //     res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/viewpart'));
-        //     return;
-        // }
+        let rid: number = parseInt(req.query.robotid, 10) ;
+        if (isNaN(rid)) {
+            res.json(ret) ;
+            return;
+        }
 
-        // ret.total = null ;
+        let robot : Robot | undefined = this.robots_.get(rid) ;
+        if (robot === undefined) {
+            res.json(ret) ;
+            return;
+        }
 
-        // let parts: RobotPart[] = await this.getPartsForRobot(partno[0]);
-        // let top: RobotPart | null = this.findPartById(1, parts) ;
+        let parts: RobotPart[] = await this.getPartsForRobot(rid);
 
-        // ret.total = this.getCost(top!, parts) ;
-
-        ret.total = 1.49 ;
+        for(let top of robot.topparts_) {
+            let part: RobotPart | null = this.findPartById(top, parts);
+            if (part !== null) {
+                if (ret.total === null) {
+                    ret.total = this.getCost(part, parts);
+                }
+                else {
+                    ret.total += this.getCost(part, parts);
+                }
+            }
+        }
         res.json(ret) ;
     }
 
-    // private async notify(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
-    //     let sql : string ;
+    private async notify(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        let sql : string ;
 
-    //     if (req.query.partno === undefined) {
-    //         res.send(createMessageHtml('Error', 'invalid api REST request /robots/notify'));
-    //         return;
-    //     }
+        if (req.query.partno === undefined) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/notify - missing query parameter'));
+            return;
+        }
 
-    //     let partno: number[] = this.stringToPartno(req.query.partno);
-    //     if (partno.length !== 2) {
-    //         res.send(createMessageHtml('Error', 'invalid api REST request /robots/notify'));
-    //         return;
-    //     }
+        let partno: PartNumber | null = PartNumber.fromString(req.query.partno);
+        if (partno === null) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/alldescs - invalid partno'));
+            return;
+        }
 
-    //     if (req.query.enabled === undefined) {
-    //         res.send(createMessageHtml('Error', 'invalid api REST request /robots/notify'));
-    //         return;
-    //     }
+        if (req.query.enabled === undefined) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/notify'));
+            return;
+        }
 
-    //     if (req.query.enabled === true || req.query.enabled === 'true') {
-    //         sql = 'INSERT into notification VALUES (' ;
-    //         sql += "'" + this.escapeString(u.username_) + "'," ;
-    //         sql += partno[0] + ")" ;
+        if (req.query.enabled === true || req.query.enabled === 'true') {
+            sql = 'INSERT into notification VALUES (' ;
+            sql += "'" + this.escapeString(u.username_) + "'," ;
+            sql += partno.robot_ + ")" ;
 
-    //         this.db().exec(sql, (err) => {
-    //             if (err) {
-    //                 xeroDBLoggerLog('ERROR', 'RobotService: failed to add notification for robot ' + req.query.partno + ' - ' + err);
-    //                 xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
-    //             }
-    //         });            
-    //     }
-    //     else {
-    //         sql = 'DELETE from notification WHERE robot=' + partno[0] + ';' ;
-    //         this.db().exec(sql, (err) => {
-    //             if (err) {
-    //                 xeroDBLoggerLog('ERROR', 'RobotService: failed to delete notification for robot ' + req.query.partno + ' - ' + err);
-    //                 xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
-    //             }
-    //         });  
-    //     }
+            this.db().exec(sql, (err) => {
+                if (err) {
+                    xeroDBLoggerLog('ERROR', 'RobotService: failed to add notification for robot ' + req.query.partno + ' - ' + err);
+                    xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
+                }
+            });            
+        }
+        else {
+            sql = 'DELETE from notification WHERE robot=' + partno.robot_ + ';' ;
+            this.db().exec(sql, (err) => {
+                if (err) {
+                    xeroDBLoggerLog('ERROR', 'RobotService: failed to delete notification for robot ' + req.query.partno + ' - ' + err);
+                    xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
+                }
+            });  
+        }
 
-    //     res.json({});
-    // }
+        res.json({});
+    }
 
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         xeroDBLoggerLog('DEBUG', "RobotService: rest api '" + req.path + "'");
@@ -1537,14 +1604,14 @@ export class RobotService extends DatabaseService {
             this.robotdata(u, req, res);
             handled = true;
         }
-        // else if (req.path === '/robots/assigned') {
-        //     this.assigned(u, req, res);
-        //     handled = true;
-        // }
-        // else if (req.path === '/robots/unassigned') {
-        //     this.unassigned(u, req, res);
-        //     handled = true;
-        // }
+        else if (req.path === '/robots/assigned') {
+            this.assigned(u, req, res);
+            handled = true;
+        }
+        else if (req.path === '/robots/unassigned') {
+            this.unassigned(u, req, res);
+            handled = true;
+        }
         else if (req.path === '/robots/newpart') {
             this.newpart(u, req, res);
             handled = true;
@@ -1557,18 +1624,18 @@ export class RobotService extends DatabaseService {
             this.editpartdone(u, req, res);
             handled = true;
         }
-        // else if (req.path === '/robots/deletepart') {
-        //     this.deletepart(u, req, res);
-        //     handled = true;
-        // }
-        // else if (req.path === '/robots/reparentpart') {
-        //     this.reparentpart(u, req, res);
-        //     handled = true;
-        // }
-        // else if (req.path === '/robots/copypart') {
-        //     this.copypart(u, req, res);
-        //     handled = true;
-        // }
+        else if (req.path === '/robots/deletepart') {
+            this.deletepart(u, req, res);
+            handled = true;
+        }
+        else if (req.path === '/robots/reparentpart') {
+            this.reparentpart(u, req, res);
+            handled = true;
+        }
+        else if (req.path === '/robots/copypart') {
+            this.copypart(u, req, res);
+            handled = true;
+        }
         else if (req.path === '/robots/partinfo') {
             this.partinfo(u, req, res);
             handled = true;
@@ -1581,14 +1648,14 @@ export class RobotService extends DatabaseService {
             this.manufacturingtypes(u, req, res);
             handled = true;
         }
-        // else if (req.path === '/robots/totalcost') {
-        //     this.totalCost(u, req, res);
-        //     handled = true ;
-        // }
-        // else if (req.path === '/robots/notify') {
-        //     this.notify(u, req, res);
-        //     handled = true ;
-        // }
+        else if (req.path === '/robots/totalcost') {
+            this.totalCost(u, req, res);
+            handled = true ;
+        }
+        else if (req.path === '/robots/notify') {
+            this.notify(u, req, res);
+            handled = true ;
+        }
 
         if (u.isAdmin()) {
             if (req.path === '/robots/newrobot') {
