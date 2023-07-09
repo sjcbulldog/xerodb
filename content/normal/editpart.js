@@ -240,6 +240,8 @@ function getOnePart() {
                         $('#desc').val(data.desc)
                     }
 
+                    $('#donedate').val(data.donedate);
+
                     let listparent = document.getElementById('descidparent');
                     let datalist = document.createElement('datalist');
                     datalist.id = 'descid';

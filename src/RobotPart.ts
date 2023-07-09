@@ -12,9 +12,15 @@ export class RobotPart {
     username_ : string;
     created_ : string;
     modified_ : string ;
+    files_: string[] ;
+    links_: string[] ;
+    donedate_: string;
+    nextdate_: string;
     attribs_ : Map<string, string> ;
 
-    constructor(parent: PartNumber | null, num: PartNumber, state: string, quantity: number, desc: string, type: string, uname: string, created: string, modified: string, attribs: Map<string, string>) {
+    constructor(parent: PartNumber | null, num: PartNumber, state: string, quantity: number, desc: string, 
+                type: string, uname: string, created: string, modified: string, mentor: string, student: string,
+                files: string[], links: string[], donedate: string, nextdate: string, attribs: Map<string, string>) {
         this.parent_ = parent ;
         this.part_ = num ;
         this.state_ = state ;
@@ -24,8 +30,12 @@ export class RobotPart {
         this.username_ = uname ;
         this.created_ = created ;
         this.modified_ = modified ;
-        this.mentor_ = "" ;
-        this.student_ = "" ;
+        this.mentor_ = mentor;
+        this.student_ = student;
+        this.files_ = files ;
+        this.links_ = links ;
+        this.donedate_ = donedate ;
+        this.nextdate_ = nextdate;
         if (attribs)
             this.attribs_ = attribs ;
         else
@@ -37,9 +47,10 @@ export class RobotPart {
     }
 
     public clone() : RobotPart {
-        let ret: RobotPart = new RobotPart(this.parent_, this.part_, this.state_, this.quantity_, this.description_, this.type_, this.username_, this.created_, this.modified_, this.cloneAttribs());
-        ret.mentor_ = this.mentor_ ;
-        ret.student_ = this.student_
+        let ret: RobotPart = new RobotPart(this.parent_, this.part_, this.state_, this.quantity_, this.description_, 
+                                    this.type_, this.username_, this.created_, this.modified_, 
+                                    this.mentor_, this.student_, this.files_, this.links_, this.donedate_, 
+                                    this.nextdate_, this.cloneAttribs());
 
         return ret;
     }
