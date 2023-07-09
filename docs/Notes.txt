@@ -1,0 +1,35 @@
+1. Are there material/machine combinations that are valid vs invalid?
+2. How do we now if we need a drawing?
+3. 
+
+Manufacturing: (checkbox for CAM)
+  Unassigned 
+  Assigned
+  Drawing
+  Drawing Check
+  Ready For CAM
+  CAMing
+  CAM Complete
+  Ready For Build (change student)
+  In Build
+  Ready For Check
+  Done
+
+Upload a drawing or add a link cad drawing
+- Drawing link
+- Parts link
+
+Purchased Assemblies (optionally add vendor)
+
+One Report - not started, in progress, Done
+COTS parts - ordered status
+
+If something has been in progress for a long amount of time
+Due dates
+
+Notes
+
+Raw Stock: 
+	Material: (Delrin, Aluminum, Poly Carb, Other)
+	Dimensions: floating point
+

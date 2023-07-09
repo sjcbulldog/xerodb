@@ -25,7 +25,7 @@ document.addEventListener("DOMContentLoaded", (event) => {
             { id: "mentor", title: "Mentor", width: "90px" },
             { id: "ntype", title: "Type", width: "110px" },
             { id: "quantity", title: "Quantity", width: "70px" },
-            { id: "state", title: "State", width: "100px" },
+            { id: "state", title: "State", width: "200px" },
             { id: "desc", title: "Description", /* width: "400px" */},
         ],
         load: function (e) {

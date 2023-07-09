@@ -26,8 +26,20 @@ export class RobotService extends DatabaseService {
 
     private static readonly stateUnassigned: string = "Unassigned" ;
     private static readonly stateAssigned: string = "Assigned" ;
-    private static readonly stateRequested: string = "Requested" ;
+    private static readonly stateReadyToOrder: string = "Ready To Order" ;
     private static readonly stateOrdered: string = "Ordered" ;
+    private static readonly stateWaitingForParts: string = "Waiting For Parts" ;
+    private static readonly stateReadyForAssembly: string = "Ready For Assembly" ;
+    private static readonly stateInAssembly: string = "In Assembly" ;
+    private static readonly stateReadyForMentorCheck: string = "Ready For Mentor Check"
+    private static readonly stateReadyForCAD: string = "Ready For CAD" ;
+    private static readonly stateInCAD: string = "In CAD" ;
+    private static readonly stateReadyForDrawingCheck: string = "Ready For Drawing Check" ;
+    private static readonly stateReadyForCAM: string = "Ready For CAM" ;
+    private static readonly stateInCAM: string = "In CAM" ;
+    private static readonly stateReadyForBuild: string = "Ready For Build" ;
+    private static readonly stateInBuild: string = "In Build" ;
+    private static readonly stateReadyForBuildCheck: string = "Ready For Build Check" ;    
     private static readonly stateDone: string = "Done" ;
 
     private static readonly methodAssignStudentAndMentor = "assign-to" ;
@@ -42,12 +54,25 @@ export class RobotService extends DatabaseService {
     private static readonly doubleClickMessage = 'Double Click To Edit' ;
 
     private static readonly manufacturing_types_ = [
-        "3d Mark Forge Print",
-        "3d Stratus Print",
-        "Velox C & C Router",
+        "By Hand",
+        "Manual Mill",
+        "Lathe",
         "Omio",
-        "Misc",
+        "Velox",
+        "CNC Mill",
+        "EZTrak",
+        "Glowforge",
+        "3D Print"
     ] ;
+
+    private static readonly material_types_ = [
+        "Polycarbonate",
+        "Aluminum",
+        "Delrin",
+        "PLA",
+        "ABS",
+        "Onyx"
+    ]
 
     private static readonly COTSAttributes = [
         new PartAttr('Vendor Name', PartAttr.TypeStringName, true, ''),
@@ -57,54 +82,30 @@ export class RobotService extends DatabaseService {
     ];
 
     private static readonly COTSStates = [
-        //
-        // The part has not been assigned to a student and a mentor.  It cannot
-        // change states by the state select.  The student and mentor needs to be
-        // assigned.
-        //
         new PartState(RobotService.stateUnassigned, 
             [
+                // System will transition when both student and mentor are assigned
             ]),
-        //
-        // The student has requested that the part be ordered by the mentor.
-        // The state changes from assigned -> requested
-        //
         new PartState(RobotService.stateAssigned, 
             [
-                new NextState(RobotService.stateRequested, RobotService.methodStudent),
+                new NextState(RobotService.stateReadyToOrder, RobotService.methodStudent),
             ]),
-        
-        //
-        // The mentor has ordered the part, the state changes from requested -> ordered
-        // Also, if the part already is here in inventory, the mentor can change the part
-        // to done.
-        //
-        new PartState(RobotService.stateRequested,
+        new PartState(RobotService.stateReadyToOrder,
             [
                 new NextState(RobotService.stateOrdered, RobotService.methodMentor),
                 new NextState(RobotService.stateDone, RobotService.methodMentor)
             ]),
-
-        //
-        // The part is in the ordered state and has arrived.  The state can be changed
-        // to the done state.  A mentor can also move the part back
-        //
         new PartState(RobotService.stateOrdered,
             [
                 new NextState(RobotService.stateDone, RobotService.methodAnyone),
                 new NextState(RobotService.stateAssigned, RobotService.methodMentor),
-                new NextState(RobotService.stateRequested, RobotService.methodMentor)
+                new NextState(RobotService.stateReadyToOrder, RobotService.methodMentor)
             ]),
-
-        //
-        // The part is in the done state.  If something is wrong a mentor can move it
-        // back to a previous state.
-        //
         new PartState(RobotService.stateDone,
             [
                 new NextState(RobotService.stateAssigned, RobotService.methodMentor),
                 new NextState(RobotService.stateOrdered, RobotService.methodMentor),
-                new NextState(RobotService.stateRequested, RobotService.methodMentor)
+                new NextState(RobotService.stateReadyToOrder, RobotService.methodMentor)
             ]),
     ] ;
 
@@ -112,57 +113,96 @@ export class RobotService extends DatabaseService {
     ];
 
     private static readonly AssemblyStates = [
-        // States: new, requested, ordered, complete
         new PartState(RobotService.stateUnassigned, 
             [
-                new NextState('requested', RobotService.methodAssignedStudent)
+                // System will transition when both student and mentor are assigned                
             ]),
-        new PartState('requested',
+        new PartState(RobotService.stateAssigned,
             [
-                new NextState('ordered', RobotService.methodMentor),
-                new NextState(RobotService.stateDone, RobotService.methodMentor)
+                new NextState(RobotService.stateWaitingForParts, RobotService.methodStudent),
             ]),
-        new PartState('ordered',
+        new PartState(RobotService.stateWaitingForParts,
             [
-                new NextState(RobotService.stateDone, RobotService.methodAnyone)
+                // System will transition to ReadyForAssembly when all child parts are 'Done'
+            ]),
+        new PartState(RobotService.stateReadyForAssembly,
+            [
+                new NextState(RobotService.stateInAssembly, RobotService.methodStudent),
+            ]),
+        new PartState(RobotService.stateInAssembly,
+            [
+                new NextState(RobotService.stateReadyForMentorCheck, RobotService.methodStudent),
+            ]),
+        new PartState(RobotService.stateReadyForMentorCheck,
+            [
+                new NextState(RobotService.stateWaitingForParts, RobotService.methodMentor),
+                new NextState(RobotService.stateReadyForAssembly, RobotService.methodMentor),
+                new NextState(RobotService.stateInAssembly, RobotService.methodAnyone),
+                new NextState(RobotService.stateDone, RobotService.methodMentor),
             ]),
         new PartState(RobotService.stateDone,
             [
-                new NextState('new', RobotService.methodMentor),
-                new NextState('ordered', RobotService.methodMentor),
-                new NextState('requested', RobotService.methodMentor)
+                new NextState(RobotService.stateWaitingForParts, RobotService.methodMentor),
+                new NextState(RobotService.stateReadyForAssembly, RobotService.methodMentor),
+                new NextState(RobotService.stateInAssembly, RobotService.methodMentor),
             ]),
     ] ;
 
     private static readonly ManufacturedAttributes = [
-        new PartAttr('Method', PartAttr.TypeManufacturingType, false, ''),
-        new PartAttr(RobotService.unitCostAttribute, PartAttr.TypeCurrencyName, false, '0.0'),
+        new PartAttr('Machine', PartAttr.TypeChoiceName, true, '').setChoices(RobotService.manufacturing_types_),
+        new PartAttr('Material', PartAttr.TypeChoiceName, true, '').setChoices(RobotService.material_types_),
+        new PartAttr('Dimension', PartAttr.TypeDoubleName, true, ''),
+        new PartAttr(RobotService.unitCostAttribute, PartAttr.TypeCurrencyName, false, '0.0')
     ];
 
     private static readonly ManufacturedStates = [
         // States: new, requested, ordered, complete
         new PartState(RobotService.stateUnassigned, 
             [
-                new NextState('requested', RobotService.methodAssignedStudent)
             ]),
-        new PartState('requested',
+        new PartState(RobotService.stateAssigned,
             [
-                new NextState('ordered', RobotService.methodMentor),
-                new NextState(RobotService.stateDone, RobotService.methodMentor)
+                new NextState(RobotService.stateReadyForCAD, RobotService.methodStudent),
+            ]),          
+        new PartState(RobotService.stateReadyForCAD,
+            [
+                new NextState(RobotService.stateInCAD, RobotService.methodAnyone),
+            ]),      
+        new PartState(RobotService.stateInCAD,
+            [
+                new NextState(RobotService.stateReadyForDrawingCheck, RobotService.methodAnyone),
+                new NextState(RobotService.stateReadyForCAD, RobotService.methodAnyone),
             ]),
-        new PartState('ordered',
+        new PartState(RobotService.stateReadyForDrawingCheck,
             [
-                new NextState(RobotService.stateDone, RobotService.methodAnyone)
+                new NextState(RobotService.stateReadyForCAM, RobotService.methodMentor),
+                new NextState(RobotService.stateReadyForBuild, RobotService.methodMentor),
+                new NextState(RobotService.stateInCAD, RobotService.methodAnyone),
             ]),
-        new PartState(RobotService.stateDone,
+        new PartState(RobotService.stateReadyForCAM,
             [
-                new NextState('new', RobotService.methodMentor),
-                new NextState('ordered', RobotService.methodMentor),
-                new NextState('requested', RobotService.methodMentor)
+                new NextState(RobotService.stateInCAM, RobotService.methodAnyone),
+            ]),
+        new PartState(RobotService.stateInCAM,
+            [
+                new NextState(RobotService.stateReadyForCAM, RobotService.methodAnyone),
+                new NextState(RobotService.stateReadyForBuild, RobotService.methodAnyone),
+            ]),
+        new PartState(RobotService.stateReadyForBuild,
+            [
+                new NextState(RobotService.stateInBuild, RobotService.methodAnyone),
+                new NextState(RobotService.stateInCAD, RobotService.methodAnyone),
+                new NextState(RobotService.stateInCAM, RobotService.methodAnyone),
+            ]),
+        new PartState(RobotService.stateInBuild,
+            [
+                new NextState(RobotService.stateReadyForBuildCheck, RobotService.methodAnyone),
+            ]),
+        new PartState(RobotService.stateReadyForBuildCheck,
+            [
+                new NextState(RobotService.stateDone, RobotService.methodMentor),
             ]),
     ] ;    
-
-
 
     nextkey_: number;
     robots_: Map<number, Robot>;
@@ -358,6 +398,7 @@ export class RobotService extends DatabaseService {
             ret['name'] = desc.name_;
             ret['required'] = desc.required_;
             ret['type'] = desc.type_;
+            ret['choices'] = desc.choices_ ;
         }
 
         return ret;
@@ -897,13 +938,13 @@ export class RobotService extends DatabaseService {
                             break ;
 
                         case RobotService.methodMentor:
-                            if (u.isRole('mentor')) {
+                            if (u.isRole(UserService.roleMentor)) {
                                 valid = true ;
                             }
                             break;
 
                         case RobotService.methodStudent:
-                            if (u.isRole('student')) {
+                            if (u.isRole(UserService.roleStudent)) {
                                 valid = true ;
                             }
                             break ;
@@ -991,7 +1032,7 @@ export class RobotService extends DatabaseService {
 
     private addChildren(obj: LooseObject, parent: PartNumber, parts: RobotPart[], depth: number) {
         for (let part of parts) {
-            if (part.parent_ !== null && part.parent_.toString() === parent.toString()) {
+            if (part.isChildOf(parent)) {
                 let child: LooseObject = this.partToLoose(null, part);
                 this.appendChild(obj, child);
                 if (part.type_ === RobotService.partTypeAssembly && depth < 100) {
@@ -1050,7 +1091,7 @@ export class RobotService extends DatabaseService {
             //
             if (part.type_ === RobotService.partTypeAssembly) {
                 for(let one of parts) {
-                    if (one.parent_ != null && one.parent_.toString() == part.part_.toString()) {
+                    if (one.isChildOf(part.part_)) {
                         //
                         // This is a child of the assembly we are copying
                         //
@@ -1068,7 +1109,7 @@ export class RobotService extends DatabaseService {
         let ret: Promise<void> = new Promise<void>( async (resolve, reject) => {
             if (part.type_ == RobotService.partTypeAssembly) {
                 for(let one of parts) {
-                    if (one.parent_ !== null && one.parent_.toString() === part.part_.toString()) {
+                    if (one.isChildOf(part.part_)) {
                         //
                         // This is a child of the assembly we are deleting, delete the children
                         //
@@ -1090,6 +1131,82 @@ export class RobotService extends DatabaseService {
             });
         }) ;
         return ret ;
+    }
+
+    private async checkAssembly(u: User, part:RobotPart, parts: RobotPart[]) : Promise<void> {
+        let ret: Promise<void> = new Promise<void>( async (resolve, reject) => { 
+            if (part.state_ === RobotService.stateWaitingForParts) {
+                let done: boolean = true ;
+                for(let one of parts) {
+                    if (one.isChildOf(part.part_)) {
+                        if (one.state_ !== RobotService.stateDone) {
+                            if (one.type_ === RobotService.partTypeAssembly) {
+                                this.checkAssembly(u, one, parts) ;
+                                if (one.state_ !== RobotService.stateDone) {
+                                    done = false ;
+                                }
+                            }
+                            else {
+                                done = false ;
+                            }
+                        }
+                    }
+                }
+
+                if (done) {
+                    let prev: RobotPart = part.clone() ;
+                    part.state_ = RobotService.stateReadyForAssembly ;
+                    await this.updatePart(u, part, prev) ;
+                }
+            }
+
+            resolve() ;
+        }) ;
+
+        return ret ;
+    }
+
+    private checkStudentChange(u:User, part: RobotPart, prev: RobotPart) : boolean {
+        let change: boolean = false ;
+        
+        if (part.type_ === RobotService.partTypeManufactured) {
+            //
+            // There are a set of transitions here
+            //
+            if (prev.state_ === RobotService.stateReadyForBuild && part.state_ === RobotService.stateInBuild) {
+                part.student_ = u.username_ ;
+                change = true ;
+            }
+            else if (prev.state_ === RobotService.stateReadyForCAD && part.state_ === RobotService.stateInCAD) {
+                part.student_ = u.username_ ;
+                change = true ;
+            }
+            else if (prev.state_ === RobotService.stateReadyForCAM && part.state_ === RobotService.stateInCAM) {
+                part.student_ = u.username_ ;
+                change = true ;
+            }
+        }
+        else if (part.type_ === RobotService.partTypeAssembly) {
+            if (prev.state_ === RobotService.stateReadyForAssembly && part.state_ === RobotService.stateInAssembly) {
+                part.student_ = u.username_ ;
+                change = true ;
+            }
+        }
+
+        return change ;
+    }
+
+    private async checkStates(u: User, rid: number) {
+        let robot: Robot | undefined = this.robots_.get(rid) ;
+        if (robot !== undefined) {
+            let parts: RobotPart[] = await this.getPartsForRobot(rid);
+            for(let top of robot.topparts_) {
+                let toppart: RobotPart | null = this.findPartById(top, parts) ;
+                if (toppart !== null) {
+                    await this.checkAssembly(u, toppart, parts);
+                }
+            }
+        }
     }
 
     private async newrobot(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
@@ -1337,8 +1454,6 @@ export class RobotService extends DatabaseService {
 
         let oldpart: RobotPart = part.clone() ;
 
-        let olddesc: string = part.description_ ;
-
         if (req.body.mentor)
             part.mentor_ = req.body.mentor ;
 
@@ -1358,11 +1473,12 @@ export class RobotService extends DatabaseService {
             }
         }
 
-        this.updatePart(u, part, oldpart);
 
-        if (olddesc !== part.description_) {
-            this.audit_.updatePartDesc(req.body.partno, part.description_);
+        if (u.isRole(UserService.roleStudent)) {
+            this.checkStudentChange(u, part, oldpart) ;
         }
+        this.updatePart(u, part, oldpart);
+        this.checkStates(u, part.part_.robot_);
 
         let url: string = '/robots/viewrobot?robotid=' + part.part_.robot_ ;
         res.redirect(url);
@@ -1540,7 +1656,7 @@ export class RobotService extends DatabaseService {
 
         if (part.type_ === RobotService.partTypeAssembly) {
             for(let other of parts) {
-                if (other.parent_ !== null && other.parent_.toString() === part.part_.toString()) {
+                if (other.isChildOf(part.part_)) {
                     ret += this.getCost(other, parts) ;
                 }
             }
@@ -1646,7 +1762,7 @@ export class RobotService extends DatabaseService {
 
             if (part.type_ === RobotService.partTypeAssembly) {
                 for(let one of parts) {
-                    if (one.parent_ != null && one.parent_.toString() === oldnum.toString()) {
+                    if (one.isChildOf(oldnum)) {
                         // This is a child of the part we are renaming
                         await this.renameOne(u, one, abbrev, newnum, parts);
                     }

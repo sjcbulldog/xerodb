@@ -31,6 +31,10 @@ export class RobotPart {
         else
             this.attribs_ = new Map<string, string>();
     }
+    
+    public isChildOf(parent: PartNumber) : boolean {
+        return this.parent_ !== null && this.parent_.toString() == parent.toString() ;
+    }
 
     public clone() : RobotPart {
         let ret: RobotPart = new RobotPart(this.parent_, this.part_, this.state_, this.quantity_, this.description_, this.type_, this.username_, this.created_, this.modified_, this.cloneAttribs());

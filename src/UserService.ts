@@ -35,6 +35,9 @@ export class UserService extends DatabaseService {
     public static readonly IncorrectPasswordError = "USER_SERVICE_INCORRECT_PASSWORD";
     public static readonly UserNotActiveError = "USER_SERVICE_USER_NOT_ACTIVE";
 
+    public static readonly roleStudent = 'student' ;
+    public static readonly roleMentor = 'mentor' ;
+
     nextkey_: number;
     users_: Map<string, User>;
     audit_ : AuditService;
@@ -378,11 +381,11 @@ export class UserService extends DatabaseService {
             }
 
             if (req.body.mentor && req.body.mentor === 'on') {
-                u.roles_.push('mentor');
+                u.roles_.push(UserService.roleMentor);
             }
 
             if (req.body.student && req.body.student === 'on') {
-                u.roles_.push('student');
+                u.roles_.push(UserService.roleStudent);
             }
 
             this.updateUser(u);

@@ -29,7 +29,7 @@ form:after {
 	clear: both;
 	visibility: hidden;
 }
-.container { margin: 25px auto; position: relative; width: 900px; }
+.container { margin: 35px auto; position: relative; width: 1560px; }
 #content {
 	background: #f9f9f9;
 	background: -moz-linear-gradient(top,  rgba(248,248,248,1) 0%, rgba(249,249,249,1) 100%);
@@ -49,7 +49,6 @@ form:after {
 	position: relative;
 	text-align: center;
 	text-shadow: 0 1px 0 #fff;
-	width: 1024px;
 }
 #content h1 {
 	color: #7E7E7E;
