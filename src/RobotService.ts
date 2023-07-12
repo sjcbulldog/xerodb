@@ -275,11 +275,12 @@ export class RobotService extends DatabaseService {
             ` ;
             this.db().exec(sql, (err) => {
                 if (err) {
-                    let msg: string = this.name() + ": cannot create table 'robots' in RobotService" ;
+                    let msg: string = this.name() + ": cannot create table 'notification' in RobotService" ;
                     xeroDBLoggerLog('ERROR', msg);
                     throw new Error(msg)
                 }
-            });        
+            });      
+       
     }
 
     private loadAll() {
@@ -895,7 +896,7 @@ export class RobotService extends DatabaseService {
         return ret;
     }
 
-    private async getPartsForRobot(robot: number): Promise<RobotPart[]> {
+    public async getPartsForRobot(robot: number): Promise<RobotPart[]> {
         let ret: Promise<RobotPart[]> = new Promise<RobotPart[]>((resolve, reject) => {
             let retval: RobotPart[] = [];
             let rstr = PartNumber.robotNumberToString(robot) + '-' ;
@@ -982,7 +983,7 @@ export class RobotService extends DatabaseService {
         return ret;
     }
 
-    private partToLoose(u:User | null, part: RobotPart): LooseObject {
+    public partToLoose(u:User | null, part: RobotPart): LooseObject {
         let ret: LooseObject = {};
         let title: string = part.part_.toString();
         let icon: string;
@@ -1017,8 +1018,19 @@ export class RobotService extends DatabaseService {
         ret['student'] = part.student_ ;
         ret['mentor'] = part.mentor_ ;
         ret['state'] = part.state_ ;
-        ret['nextdate'] = part.nextdate_ ;
-        ret['donedate'] = part.donedate_ ;
+        if (part.nextdate_.length === 0) {
+            ret['nextdate'] = 'Not Set' ;
+        }
+        else {
+            ret['nextdate'] = part.nextdate_ ;
+        }
+
+        if (part.donedate_.length === 0) {
+            ret['donedate'] = 'Not Set' ;
+        }
+        else {
+            ret['donedate'] = part.donedate_ ;
+        }
 
         if (u === null) {
             ret['admin'] = false ;
@@ -1490,6 +1502,7 @@ export class RobotService extends DatabaseService {
         part.description_ = req.body.desc;
         part.quantity_ = parseInt(req.body.quantity, 10);
         part.donedate_ = req.body.donedate ;
+        part.nextdate_ = req.body.nextdate;
 
         for (let attr of this.getAttributes(part)) {
             let val = req.body[attr.name_];
@@ -1838,6 +1851,7 @@ export class RobotService extends DatabaseService {
         let url: string = '/robots/viewrobot?robotid=' + part.part_.robot_ ;
         res.redirect(url);
     }
+
 
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         xeroDBLoggerLog('DEBUG', "RobotService: rest api '" + req.path + "'");

@@ -1,0 +1,19 @@
+.flex-container {
+    display: flex;
+}
+
+.flex-child {
+    flex: 1;
+    border: 2px solid rgb(0, 0, 0);
+    width: 512px;
+    height: 256px;
+}  
+
+.flex-child:first-child {
+    margin-right: 20px;
+    border: 2px solid rgb(0, 0, 0);
+} 
+
+h2 {
+    margin: 0px;
+}

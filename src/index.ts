@@ -14,15 +14,19 @@ import { RobotService } from './RobotService';
 import * as FileStreamRotator from 'file-stream-rotator';
 import { xeroDBLoggerInit, xeroDBLoggerLog } from './logger';
 import { AuditService } from './AuditService';
+import { DashboardService } from './DashboardService';
 
 const nologinName: string = "/nologin/*";
 const adminName: string = "/admin/*";
 const normalName: string = "/normal/*";
 
+const useDashboard: boolean = true ;
+
 const config: XeroDBConfig = XeroDBConfig.getXeroDBConfig();
 const auditsrv: AuditService = new AuditService(config.dataDir());
 const usersrv: UserService = new UserService(config.dataDir(), auditsrv);
 const robotsrv: RobotService = new RobotService(config.dataDir(),usersrv, auditsrv);
+const dashboardsrv: DashboardService = new DashboardService(config.dataDir(), robotsrv, usersrv) ;
 
 const app: Express = express();
 
@@ -134,40 +138,69 @@ app.all('/audit/*', (req, res) => {
   }
 });
 
-app.all('/menu', (req, res) => {
-  try {
-    let u: User | null = usersrv.userFromRequest(req);
-    if (u === null) {
-      res.redirect('/');
+app.all('/dashboard/*', (req, res) => {
+    try {
+      dashboardsrv.get(req, res);
     }
-    else if (u.isAdmin()) {
-      res.redirect('/admin/menu.html');
+    catch (err) {
+      let errobj: Error = err as Error;
+  
+      if (errobj !== undefined) {
+        if (errobj.stack !== undefined) {
+          xeroDBLoggerLog('DEBUG', errobj.stack.toString());
+        }
+      }
+      xeroDBLoggerLog('ERROR', 'exception caught for URL "' + req.url + '"');
+      res.status(500).send(createMessageHtml('Internal Error', 'internal error - exception thrown - check log file'));
     }
-    else {
-      res.redirect('/normal/menu.html');
-    }
-  }
-  catch (err) {
-    let errobj: Error = err as Error;
+  });
 
-    if (errobj !== undefined) {
-      if (errobj.stack !== undefined) {
-        xeroDBLoggerLog('DEBUG', errobj.stack.toString());
+app.all('/menu', (req, res) => {
+  if (useDashboard) {
+    res.redirect('/normal/dashboard.html') ;
+  }
+  else {
+    try {
+      let u: User | null = usersrv.userFromRequest(req);
+      if (u === null) {
+        res.redirect('/');
+      }
+      else if (u.isAdmin()) {
+        res.redirect('/admin/menu.html');
+      }
+      else {
+        res.redirect('/normal/menu.html');
       }
     }
-    xeroDBLoggerLog('ERROR', 'exception caught for URL "' + req.url + '"');
-    res.status(500).send(createMessageHtml('Internal Error', 'internal error - exception thrown - check log file'));
+    catch (err) {
+      let errobj: Error = err as Error;
+
+      if (errobj !== undefined) {
+        if (errobj.stack !== undefined) {
+          xeroDBLoggerLog('DEBUG', errobj.stack.toString());
+        }
+      }
+      xeroDBLoggerLog('ERROR', 'exception caught for URL "' + req.url + '"');
+      res.status(500).send(createMessageHtml('Internal Error', 'internal error - exception thrown - check log file'));
+    }
   }
-});
+}) ;
 
 if (config.production()) {
-  var privateKey = fs.readFileSync(path.join(config.securityDir(), 'server.key'), 'utf8');
-  var certificate = fs.readFileSync(path.join(config.securityDir(), 'server.crt'), 'utf8');
-  var credentials = { key: privateKey, cert: certificate };
+  if (config.useTLS()) {
+    var privateKey = fs.readFileSync(path.join(config.securityDir(), 'server.key'), 'utf8');
+    var certificate = fs.readFileSync(path.join(config.securityDir(), 'server.crt'), 'utf8');
+    var credentials = { key: privateKey, cert: certificate };
 
-  https.createServer(credentials, app).listen(config.port(), '0.0.0.0', 16, () => {
-    xeroDBLoggerLog('INFO', `xerodb: production server is running at "${config.url()}" on port ${config.port()}`);
-  });
+    https.createServer(credentials, app).listen(config.port(), '0.0.0.0', 16, () => {
+      xeroDBLoggerLog('INFO', `xerodb: production server w/ TLS is running at "${config.url()}" on port ${config.port()}`);
+    });
+  }
+  else {
+    app.listen(config.port(), '0.0.0.0', 16, () => {
+      xeroDBLoggerLog('INFO', `xerodb: production server without TLS is running at "${config.url()}" on port ${config.port()}`);
+    });    
+  }
 }
 else {
   app.listen(config.port(), '127.0.0.1', 16, () => {

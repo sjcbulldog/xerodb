@@ -29,6 +29,7 @@ export class XeroDBConfig
     private port_ : number ;
     private email_ : EmailConfig ;
     private production_ : boolean ;
+    private usetls_ : boolean ;
 
     public static getXeroDBConfig() : XeroDBConfig {
         return XeroDBConfig.config ;
@@ -41,8 +42,16 @@ export class XeroDBConfig
             throw new Error('The value PRODUCTION is not defined in the .env file');
         }
 
+
         if (process.env.PRODUCTION === 'true') {
             this.production_ = true ;
+
+            if (process.env.USETLS && process.env.USETLS === 'true') {
+                this.usetls_ = true ;
+            }
+            else {
+                this.usetls_ = false ;
+            }
 
             if (process.env.DATADIR !== undefined) {
                 this.datadir_ = process.env.DATADIR! ;
@@ -97,6 +106,7 @@ export class XeroDBConfig
             this.logdir_ = path.join(__dirname, '..', 'logs') ;
             this.port_ = 8000 ;
             this.url_ = 'http://127.0.0.1:' + this.port_ ;
+            this.usetls_ = false;
         }
         else {
             throw new Error('the ".env" value PRODUCTIONS is not valid - must be either "true" or "false"');
@@ -182,5 +192,9 @@ export class XeroDBConfig
 
     public production() : boolean {
         return this.production_;
+    }
+
+    public useTLS() : boolean {
+        return this.usetls_ ;
     }
 }

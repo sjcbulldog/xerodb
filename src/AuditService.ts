@@ -1,8 +1,6 @@
-import sqlite3 from 'sqlite3';
+import path from 'path';
 import { Response, Request } from 'express';
 import { xeroDBLoggerLog } from './logger';
-import path from 'path';
-import { exit } from 'process';
 import { DatabaseService } from './DatabaseService';
 import { createMessageHtml } from './pagegen';
 import { PartNumber } from './PartNumber';

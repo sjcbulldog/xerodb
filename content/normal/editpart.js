@@ -1,3 +1,6 @@
+var oldstate = undefined ;
+var olddate = undefined ;
+
 function addOneSelect(attr, lastone, choices, value) {
     var parent = lastone.parentElement;
 
@@ -168,9 +171,36 @@ function setState(data, lastone) {
 
 let xeroAttrs = null;
 
+function getInputValue(name) {
+    let input = document.getElementById(name);
+    if (input === undefined)
+        return '' ;
+
+    return input.value ;
+}
+
+function checkStateChange() {
+    let newstate = getInputValue('state') ;
+    let newdate = getInputValue('nextdate');
+
+    if (newstate !== oldstate && newstate !== 'Done') {
+        if (newdate === olddate || newdate === '') {
+            alert('You have changed the state of the part. You need to update the Next Date which is the date when the part will leave this new state');
+            return false;
+        }
+    }
+
+    return true ;
+}
+
 function doValidate(e) {
     if (xeroAttrs === null)
         return;
+
+    if (!checkStateChange()) {
+        e.preventDefault();
+        return ;        
+    }
 
     for (var attr of xeroAttrs) {
         let input = document.getElementById(attr.key);
@@ -210,6 +240,9 @@ function getOnePart() {
                 $.getJSON('/robots/alldescs?partno=' + partnovalue, (descs) => {
                     $('#partnotext').html('<b>' + data.key + ', ' + data.ntype + '</b>');
 
+                    oldstate = data.state ;
+                    olddate = data.nextdate;
+
                     let form = document.getElementById('editpartform');
                     form.onsubmit = doValidate;
 
@@ -240,7 +273,14 @@ function getOnePart() {
                         $('#desc').val(data.desc)
                     }
 
-                    $('#donedate').val(data.donedate);
+                    if (/^[0-9]+-[0-9]+-[0-9]+$/.test(data.donedate)) {
+                        $('#donedate').val(data.donedate);
+                    }
+                    if (/^[0-9]+-[0-9]+-[0-9]+$/.test(data.nextdate)) {
+                        $('#nextdate').val(data.nextdate);
+                    }
+
+                    $('#nextstatelabel').html("'" + oldstate + "' Date");
 
                     let listparent = document.getElementById('descidparent');
                     let datalist = document.createElement('datalist');
