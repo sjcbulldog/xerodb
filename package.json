@@ -18,6 +18,7 @@
     "crypto": "^1.0.1",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
+    "express-fileupload": "^1.4.0",
     "express-session": "^1.17.3",
     "file-stream-rotator": "^1.0.0",
     "morgan": "^1.10.0",
@@ -29,6 +30,7 @@
   "devDependencies": {
     "@types/cookie-parser": "^1.4.3",
     "@types/express": "^4.17.17",
+    "@types/express-fileupload": "^1.4.1",
     "@types/multer": "^1.4.7",
     "@types/node": "^20.3.1",
     "typescript": "^5.1.3"

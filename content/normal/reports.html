@@ -1,31 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <link rel="stylesheet" href="/nologin/menu.css">
+    <link rel="stylesheet" href="/normal/reports.css">
+    <script type="text/javascript" src="/nologin/jquery/jquery-3.7.0.js"></script>
+    <script type="text/javascript" src="/normal/reports.js"></script>
+    <link rel="stylesheet" media="screen" href="/nologin/wunderbaum/wunderbaum.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.9.0/font/bootstrap-icons.css" />
+    <script type="text/javascript" src="/nologin/wunderbaum/wunderbaum.umd.js"></script>
 </head>
 <body>
-
-<div class="container">
-    <section id="content">
-        <h2 class="title">Reports</h2>
-        <ul class="ulclass" style="list-style: none;">
-            <li class="liclass">
-                <a href="/normal/userreport.html">User Account Activity</a>
-            </li>
-            <li class="liclass">
-                <a href="/normal/partreport.html">Parts Activity</a>
-            </li>
-            <li class="liclass">
-                <a href="/normal/assigned.html">Parts Assigned To You</a>
-            </li>
-            <li class="liclass">
-                <a href="/normal/unassigned.html">Parts Unassigned</a>
-            </li>
-            <li class="liclass">
-                <a href="/menu">Main Menu</a>
-            </li>
-        </ul>
-    </section>
-</div>
+    <b>Robot: </b>
+    <select id="selrobot" onclick="robotSelected(this)"></select>
+    <b>Report:</b>
+    <select id="selreport" onclick="reportSelected(this)"></select>
+    <div id="report"></div>
 </body>
 </html>

@@ -1467,6 +1467,7 @@ export class RobotService extends DatabaseService {
         let vars: Map<string, string> = new Map<string, string>();
         vars.set('$$$PARTNO$$$', req.query.partno);
         vars.set('$$$DOUBLECLK$$$', RobotService.doubleClickMessage);
+        vars.set('$$$RETPLACE$$$', req.query.retplace);
         res.send(processPage(vars, '/normal/editpart.html'));
     }
 
@@ -1511,7 +1512,6 @@ export class RobotService extends DatabaseService {
             }
         }
 
-
         if (u.isRole(UserService.roleStudent)) {
             this.checkStudentChange(u, part, oldpart) ;
         }
@@ -1519,24 +1519,29 @@ export class RobotService extends DatabaseService {
         this.checkStates(u, part.part_.robot_);
 
         let url: string = '/robots/viewrobot?robotid=' + part.part_.robot_ ;
+        if (req.body.retplace !== undefined) {
+            url = req.body.retplace ;
+            url = url.replace("$$$ROBOTID$$$", "?robotid=" + part.part_.robot_) ;
+        }
+
         res.redirect(url);
     }
 
     private async deletepart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         if (req.query.partno === undefined) {
-            res.send(createMessageHtml('Error', 'invalid api REST request /robots/delete - missing query parameters'));
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/deletepart - missing query parameters'));
             return;
         }
 
         let partno: PartNumber | null = PartNumber.fromString(req.query.partno) ;
         if (partno === null) {
-            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/editpartdone - invalid part number'));
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/deletepart - invalid part number'));
             return;
         }
 
         let part: RobotPart | null = await this.getOnePart(partno);
         if (part === null) {
-            res.send(createMessageHtml('Error', 'invalid api REST request /robots/editpartdone - invalid part number'));
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/deletepart - invalid part number'));
             return;
         }
 

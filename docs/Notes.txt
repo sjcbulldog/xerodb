@@ -2,7 +2,6 @@
    For now all combinations are valid 
 2. How do we now if we need a drawing?
    Right now the mentor picks when doing the drawing check
-3. 
 
 Upload a drawing or add a link cad drawing
 - Drawing link
@@ -10,9 +9,7 @@ Upload a drawing or add a link cad drawing
 
 Purchased Assemblies (optionally add vendor)
 
-Dashboard
-
-Reports
-
-Due dates (for next state)
-
+Users
+-----
+- Varied roles, not just admin, mentor, student
+- Allow user to change their email address

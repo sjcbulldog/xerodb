@@ -69,7 +69,7 @@ document.addEventListener("DOMContentLoaded", (event) => {
         activate: function (e) {
         },
         dblclick: function (e) {
-            window.location.href = "/robots/editpart?partno=" + e.node.key + "&parttype=" + e.node.data.ntype;
+            window.location.href = "/robots/editpart?partno=" + e.node.key + "&parttype=" + e.node.data.ntype + "&retplace=/robots/viewrobot$$$ROBOTID$$$" ;
         },
         enhanceTitle: function (e) {
             e.titleSpan.title = e.node.data.desc ;

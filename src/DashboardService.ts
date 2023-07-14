@@ -119,17 +119,13 @@ export class DashboardService extends DatabaseService {
         let current: Date = new Date() ;
 
         for(let one of parts) {
-            let d: Date = new Date(one.donedate_) ;
-            if (d < current) {
+            if (one.doneDaysLate() > 0) {
                 let obj: LooseObject = this.robots_.partToLoose(u, one) ;
                 ret.push(obj) ;
             }
-            else {
-                d = new Date(one.nextdate_) ;
-                if (d < current) {
-                    let obj: LooseObject = this.robots_.partToLoose(u, one) ;
-                    ret.push(obj) ;
-                }
+            else if (one.nextDaysLate() > 0) {
+                let obj: LooseObject = this.robots_.partToLoose(u, one) ;
+                ret.push(obj) ;
             }
         }
 
@@ -203,7 +199,7 @@ export class DashboardService extends DatabaseService {
         }
 
         res.json(ret) ;
-    }        
+    }
 
     private async latechart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         if (req.query.robotid === undefined) {
@@ -217,23 +213,126 @@ export class DashboardService extends DatabaseService {
             return;            
         }
 
+        let type: string = 'next' ;
+        if (req.query.type !== undefined)
+            type = req.query.type ;
+
         let ret: LooseObject[] = [] ;
         let parts: RobotPart[] = await this.robots_.getPartsForRobot(rid);
         let bystate: Map<string, LooseObject[]> = new Map<string, LooseObject[]>();
 
+        // 0, 1, 3, 5, 10, 10+
+        let buckets: number[] = [0, 0, 0, 0, 0, 0]
+        for(let one of parts) {
+            let dlate: number ;
+            
+            if (type === 'next')
+                dlate = one.nextDaysLate() ;
+            else
+                dlate = one.doneDaysLate() ;
+                
+            if (dlate === 0) {
+                buckets[0]++ ;
+            }
+            else if (dlate <= 1) {
+                buckets[1]++
+            }
+            else if (dlate <= 3) {
+                buckets[2]++ ;
+            }
+            else if (dlate <= 5) {
+                buckets[3]++ ;
+            }
+            else if (dlate <= 10) {
+                buckets[4]++ ;
+            }
+            else {
+                buckets[5]++ ;
+            }
+        }
+
         ret = [
-            { label: '1', value: 3 },
-            { label: '9', value: 6 },
-            { label: '?', value: 16}
+            { label: 'On Time', value: buckets[0] },
+            { label: '<= 1 day', value: buckets[1] },
+            { label: '<= 3 days', value: buckets[2]},
+            { label: '<= 5 days', value: buckets[3]},
+            { label: '<= 10 days', value: buckets[4]},
+            { label: '> 10 days', value: buckets[5]},
         ] ;
 
         res.json(ret) ;
     }        
 
+    private async latereport(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        if (req.query.robotid === undefined) {
+            res.json(['invalid api REST request /robots/viewrobot - missing required parameters']) ;
+            return;
+        }
+
+        let rid: number = parseInt(req.query.robotid, 10) ;
+        if (isNaN(rid)) {
+            res.json({error: 'invalid api REST request /robots/viewrobot - invalid robot id'}) ;
+            return;            
+        }
+
+        let type: string = 'next' ;
+        if (req.query.type !== undefined)
+            type = req.query.type ;
+
+        let ret: LooseObject[] = [] ;
+        let parts: RobotPart[] = await this.robots_.getPartsForRobot(rid);
+        let bystate: Map<string, LooseObject[]> = new Map<string, LooseObject[]>();
+
+        // 0, 1, 3, 5, 10, 10+
+        let b0: LooseObject[] = [] ;
+        let b1: LooseObject[] = [] ;
+        let b2: LooseObject[] = [] ;
+        let b3: LooseObject[] = [] ;
+        let b4: LooseObject[] = [] ;
+        let b5: LooseObject[] = [] ;
+
+        for(let one of parts) {
+            let dlate: number ;
+            
+            if (type === 'next')
+                dlate = one.nextDaysLate() ;
+            else
+                dlate = one.doneDaysLate() ;
+                
+            if (dlate === 0) {
+                b0.push(this.robots_.partToLoose(u, one)) ;
+            }
+            else if (dlate <= 1) {
+                b1.push(this.robots_.partToLoose(u, one)) ;
+            }
+            else if (dlate <= 3) {
+                b2.push(this.robots_.partToLoose(u, one)) ;
+            }
+            else if (dlate <= 5) {
+                b3.push(this.robots_.partToLoose(u, one)) ;
+            }
+            else if (dlate <= 10) {
+                b4.push(this.robots_.partToLoose(u, one)) ;
+            }
+            else {
+                b5.push(this.robots_.partToLoose(u, one)) ;
+            }
+        }
+
+        ret = [
+            { title: 'On Time (' + b0.length + ')', children: b0 },
+            { title: '<= 1 day (' + b1.length + ')', children: b1 },
+            { title: '<= 3 days (' + b2.length + ')', children: b2},
+            { title: '<= 5 days (' + b3.length + ')', children: b3},
+            { title: '<= 10 days (' + b4.length + ')', children: b4},
+            { title: '> 10 days (' + b5.length + ')', children: b5},
+        ] ;
+
+        res.json(ret) ;
+    }          
+
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         xeroDBLoggerLog('DEBUG', "HistoryService: rest api '" + req.path + "'");
-
-        console.log("dashboard: '" + req.path + "'");
 
         let u: User | null = this.users_.userFromRequest(req);
         if (u === null) {
@@ -270,6 +369,10 @@ export class DashboardService extends DatabaseService {
         }
         else if (req.path === '/dashboard/latechart') {
             this.latechart(u, req, res);
+            handled = true ;
+        }
+        else if (req.path === '/dashboard/latereport') {
+            this.latereport(u, req, res);
             handled = true ;
         }
         else if (req.path === '/dashboard/setrobot') {

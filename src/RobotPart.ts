@@ -46,6 +46,36 @@ export class RobotPart {
         return this.parent_ !== null && this.parent_.toString() == parent.toString() ;
     }
 
+    public doneDaysLate() : number {
+        if (this.donedate_.length === 0)
+            return Infinity;
+
+        let ret: number = 0 ;
+        let current: Date = new Date() ;
+        let donedate: Date = new Date(this.donedate_);
+        var diff = current.getTime() - donedate.getTime();
+        if (diff > 0) {
+            ret = Math.ceil(diff / (1000 * 3600 * 24)); 
+        }
+
+        return ret ;
+    }
+
+    public nextDaysLate() {
+        if (this.nextdate_.length === 0)
+            return Infinity;
+
+        let ret: number = 0 ;
+        let current: Date = new Date() ;
+        let donedate: Date = new Date(this.nextdate_);
+        var diff = current.getTime() - donedate.getTime();
+        if (diff > 0) {
+            ret = Math.floor(diff / (1000 * 3600 * 24)); 
+        }
+
+        return ret ;
+    }
+
     public clone() : RobotPart {
         let ret: RobotPart = new RobotPart(this.parent_, this.part_, this.state_, this.quantity_, this.description_, 
                                     this.type_, this.username_, this.created_, this.modified_, 

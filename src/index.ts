@@ -12,9 +12,11 @@ import https from 'https';
 import fs from 'fs';
 import { RobotService } from './RobotService';
 import * as FileStreamRotator from 'file-stream-rotator';
+import FileUpload from 'express-fileupload';
 import { xeroDBLoggerInit, xeroDBLoggerLog } from './logger';
 import { AuditService } from './AuditService';
 import { DashboardService } from './DashboardService';
+
 
 const nologinName: string = "/nologin/*";
 const adminName: string = "/admin/*";
@@ -49,6 +51,7 @@ app.use(express.json());
 app.use(bodyParser.urlencoded());
 app.use(bodyParser.json());
 app.use(cookieParser());
+app.use(FileUpload({ createParentPath: true}));
 
 app.get(nologinName, (req, res, next) => {
   let urlpath: string = req.url.substring(nologinName.length - 1);
@@ -61,7 +64,7 @@ app.get(nologinName, (req, res, next) => {
 app.get(adminName, (req, res) => {
 
   if (!isAdmin(usersrv, req, res)) {
-    res.send(createMessageHtml('Permission Denied', 'You do not have permission for the requested resource'));
+    res.send(createMessageHtml('Permission Denied', 'You do not have permission for this command'));
   }
   else {
     let urlpath: string = req.url.substring(adminName.length - 1);

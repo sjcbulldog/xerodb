@@ -14,6 +14,7 @@ function tellLogin() {
     alert('You are not logged in.');
     window.parent.location.href = '/nologin/login.html';
 }
+
 function populateLateChart(data) {
     if (statechart !== undefined) {
         $('#canvas2').replaceWith('<canvas id="canvas2"></canvas>');
@@ -35,7 +36,7 @@ function populateLateChart(data) {
             options: {
                 plugins: {
                     title: {
-                        text: 'Late Parts',
+                        text: 'Late Parts (next state)',
                         display: true
                     },
                     legend: {
@@ -95,7 +96,7 @@ function populateDashboard(id) {
         populateStateChart(data);
     });
 
-    $.getJSON('/dashboard/latechart?robotid=' + currentRobot, (data) => {
+    $.getJSON('/dashboard/latechart?type=next&robotid=' + currentRobot, (data) => {
         populateLateChart(data);
     });
 
@@ -141,7 +142,12 @@ function createLateTree(which) {
         },
         enhanceTitle: function (e) {
             e.titleSpan.title = e.node.data.desc;
-        }
+        },
+        dblclick: function (e) {
+            if (/^[0-9][0-9][0-9]-[A-Za-z]+-[0-9][0-9][0-9][0-9][0-9]$/.test(e.node.key)) {
+                window.location.href = "/robots/editpart?partno=" + e.node.key + "&parttype=" + e.node.data.ntype + "&retplace=/normal/dashdef.html";
+            }
+        },
     });
 }
 
@@ -169,7 +175,12 @@ function createStateTree(which) {
         },
         enhanceTitle: function (e) {
             e.titleSpan.title = e.node.data.desc;
-        }
+        },
+        dblclick: function (e) {
+            if (/^[0-9][0-9][0-9]-[A-Za-z]+-[0-9][0-9][0-9][0-9][0-9]$/.test(e.node.key)) {
+                window.location.href = "/robots/editpart?partno=" + e.node.key + "&parttype=" + e.node.data.ntype + "&retplace=/normal/dashdef.html";
+            }
+        },
     });
 }
 
