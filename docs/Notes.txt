@@ -1,7 +1,14 @@
+My Open Questions
+----------------------------------------------------------------------
 1. Are there material/machine combinations that are valid vs invalid?
    For now all combinations are valid 
-2. How do we now if we need a drawing?
+2. How do we know if we need a drawing?
    Right now the mentor picks when doing the drawing check
+3. When you copy a part to a new location in the tree, do you keep the student/mentor?
+
+TODO
+----
+Try other screen resolutions
 
 Upload a drawing or add a link cad drawing
 - Drawing link
@@ -9,7 +16,6 @@ Upload a drawing or add a link cad drawing
 
 Purchased Assemblies (optionally add vendor)
 
-Users
------
-- Varied roles, not just admin, mentor, student
-- Allow user to change their email address
+Generalize Robot Part Types (e.g. COTS, Assembly, Manufactured)
+
+

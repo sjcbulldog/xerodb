@@ -14,6 +14,7 @@ import { AuditService } from './AuditService';
 import { NextState, PartState } from './PartState';
 import { sendEmail } from './mail';
 import { packFiles, packLinks, unpackFiles, unpackLinks } from './dbutils';
+import { FileStorageManager } from './FileStorageManager';
 
 interface LooseObject {
     [key: string]: any
@@ -209,6 +210,7 @@ export class RobotService extends DatabaseService {
     robots_: Map<number, Robot>;
     users_: UserService;
     audit_: AuditService;
+    fsmgr_ : FileStorageManager;
 
     constructor(rootdir: string, users: UserService, audit: AuditService) {
         super('RobotService', path.join(rootdir, RobotService.robotFileName));
@@ -217,6 +219,7 @@ export class RobotService extends DatabaseService {
         this.audit_ = audit ;
         this.nextkey_ = 1;
         this.robots_ = new Map<number, Robot>();
+        this.fsmgr_ = new FileStorageManager(path.join(rootdir, 'files'));
 
         this.loadAll() ;
     }
@@ -279,8 +282,22 @@ export class RobotService extends DatabaseService {
                     xeroDBLoggerLog('ERROR', msg);
                     throw new Error(msg)
                 }
-            });      
-       
+            }); 
+            
+        sql =
+            `CREATE TABLE drawings (
+                partno text not null,
+                filename text not null,
+                localfile text not null,
+                desc text not null);
+            ` ;
+            this.db().exec(sql, (err) => {
+                if (err) {
+                    let msg: string = this.name() + ": cannot create table 'drawings' in RobotService" ;
+                    xeroDBLoggerLog('ERROR', msg);
+                    throw new Error(msg)
+                }
+            });    
     }
 
     private loadAll() {
@@ -326,6 +343,25 @@ export class RobotService extends DatabaseService {
                 }
             }
         }) ;
+    }
+
+    private storeFile(partno: string, name: string, desc: string, data:Buffer) : string {
+        let fname: string = this.fsmgr_.storeFile(data);
+
+        let sql = 'INSERT INTO drawings VALUES (';
+            sql += "'" + partno + "',";
+            sql += "'" + name + "',";
+            sql += "'" + fname + "',";
+            sql += "'" + desc + "');";
+
+            this.db().exec(sql, (err) => {
+                if (err) {
+                }
+                else {
+                }
+            });
+        
+        return fname ;
     }
 
     private diffAttribs(current: Map<string, string>, old: Map<string, string>) : string[] {
@@ -1119,7 +1155,11 @@ export class RobotService extends DatabaseService {
             //
             // Make a copy of the part, with the new part number and place it under the given parent
             //
-            await this.createNewPart(u, parent, newpartno, RobotService.stateUnassigned, part.type_, part.description_, 
+            let st: string = RobotService.stateUnassigned ;
+            if (part.student_.length > 0 && part.mentor_.length > 0) {
+                st = RobotService.stateAssigned ;
+            }
+            await this.createNewPart(u, parent, newpartno, st, part.type_, part.description_, 
                                     this.copyAttributes(part.attribs_), part.student_, part.mentor_);
 
             //
@@ -1601,11 +1641,9 @@ export class RobotService extends DatabaseService {
     }
 
     private async copypart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
-
         //
         // We are copying the part given by partno to have a new parent the parent given by parentno
         //
-
         if (req.query.partno === undefined) {
             res.send(createMessageHtml('Error', 'invalid api REST request /robots/reparentpart - missing query parameters'));
             return;
@@ -1857,6 +1895,12 @@ export class RobotService extends DatabaseService {
         res.redirect(url);
     }
 
+    private async adddrawing(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        let lobj : LooseObject = req as LooseObject ;
+        let fname: string = this.storeFile(req.body.partno, lobj.files.drawing.name, req.body.desc, lobj.files.drawing.data);
+        console.log(req);
+        res.json({});
+    }
 
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         xeroDBLoggerLog('DEBUG', "RobotService: rest api '" + req.path + "'");
@@ -1936,6 +1980,10 @@ export class RobotService extends DatabaseService {
         }
         else if (req.path === '/robots/rename') {
             this.rename(u, req, res);
+            handled = true ;
+        }
+        else if (req.path === '/robots/adddrawing') {
+            this.adddrawing(u, req, res);
             handled = true ;
         }
 

@@ -1,15 +1,89 @@
 var parttree = null;
+var drawingWin = false;
+
+function showDrawingWindow() {
+    if (parttree === null || parttree.activeNode === null)
+        return;
+
+    let html = `
+    <div>
+        <div style="width: 50%; float: left;">
+            <b>Files:</b></br>
+            <select id="files" multiple size=4 style="width: 240px;"></select>
+            <input type="button" id="deletefile" name="deletefile" value="Delete"></input>
+        </div>
+        <div style="width: 50%; float: left;">
+            <b>Links:</b><br>
+            <select id="files" multiple size=4 style="width: 240px;"></select>
+            <input type="button" id="deletelink" name="deletelink" value="Delete"></input>
+        </div>
+    </div>
+    <div style="margin-bottom: 10px;">&nbsp;</div>
+    <hr>
+    <b>New Drawing File</b>
+    <br>
+    <label for="desc">Description:</label>
+    <input type="text" id="desc" name="desc" value=""></input>
+    <br>
+    <label for="upload">File To Upload:</label>
+    <input type="file" id="upload" name="upload"></input>
+    <br>
+    <input type="button" id="doupload" name="doupload" value="Upload"></input>` ;
+
+    $("#dialog-confirm").html(html);
+
+    document.getElementById('doupload').addEventListener('click', function (e) {
+        var filesel = document.getElementById('upload');
+        var desc = document.getElementById('desc');
+        if (filesel.value.length === 0) {
+            alert("No file has been selected.  You must select a file to upload a new drawing for a part.");
+        }
+        else if (desc.length === 0) {
+            alert("No description was provided for the new drawing file.  A description is required.");
+        }
+        else {
+            var myFormData = new FormData();
+            myFormData.append('drawing', filesel.files[0]);
+            myFormData.append('partno', parttree.activeNode.key);
+            myFormData.append('desc', desc.value);
+
+            $.ajax({
+                url: '/robots/adddrawing',
+                type: 'POST',
+                processData: false, // important
+                contentType: false, // important
+                dataType: 'json',
+                data: myFormData
+            });
+        }
+    });
+
+    drawingWin = true;
+    $("#dialog-confirm").dialog({
+        resizable: false,
+        modal: true,
+        title: "Edit Drawings",
+        height: 384,
+        width: 576,
+        buttons: {
+            "Close": function () {
+                $(this).dialog('close');
+                drawingWin = false ;
+            }
+        }
+    });
+}
 
 function updateCosts() {
     $.getJSON('/robots/totalcost?robotid=' + robotid, (data) => {
         if (data.total !== undefined) {
-            const formatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD'}) ;
+            const formatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
             $("#costs").html('Total Robot Cost: ' + formatter.format(data.total));
         }
         else {
-            $("#costs").html('Error Computing Robot Costs') ;
+            $("#costs").html('Error Computing Robot Costs');
         }
-    }) ;
+    });
 }
 
 document.addEventListener("DOMContentLoaded", (event) => {
@@ -26,11 +100,11 @@ document.addEventListener("DOMContentLoaded", (event) => {
             { id: "ntype", title: "Type", width: "110px" },
             { id: "quantity", title: "Quantity", width: "70px" },
             { id: "state", title: "State", width: "200px" },
-            { id: "desc", title: "Description", /* width: "400px" */},
+            { id: "desc", title: "Description", /* width: "400px" */ },
         ],
         load: function (e) {
             e.tree.expandAll();
-            updateCosts() ;
+            updateCosts();
         },
         render: function (e) {
             const node = e.node;
@@ -44,9 +118,9 @@ document.addEventListener("DOMContentLoaded", (event) => {
                     return false;
                 }
                 if (e.event.ctrlKey)
-                    e.event.dataTransfer.effectAllowed = "copy" ;
-                else 
-                    e.event.dataTransfer.effectAllowed = "move" ;
+                    e.event.dataTransfer.effectAllowed = "copy";
+                else
+                    e.event.dataTransfer.effectAllowed = "move";
                 return true;
             },
             dragEnter: (e) => {
@@ -60,31 +134,24 @@ document.addEventListener("DOMContentLoaded", (event) => {
             drop: (e) => {
                 if (e.event.ctrlKey)
                     window.location.href = "/robots/copypart?partno=" + e.sourceNode.key + "&parent=" + e.node.key;
-                else 
+                else
                     window.location.href = "/robots/reparentpart?partno=" + e.sourceNode.key + "&parent=" + e.node.key;
 
-                updateCosts() ;
+                updateCosts();
             },
         },
-        activate: function (e) {
-        },
         dblclick: function (e) {
-            window.location.href = "/robots/editpart?partno=" + e.node.key + "&parttype=" + e.node.data.ntype + "&retplace=/robots/viewrobot$$$ROBOTID$$$" ;
+            window.location.href = "/robots/editpart?partno=" + e.node.key + "&parttype=" + e.node.data.ntype + "&retplace=/robots/viewrobot$$$ROBOTID$$$";
         },
         enhanceTitle: function (e) {
-            e.titleSpan.title = e.node.data.desc ;
+            e.titleSpan.title = e.node.data.desc;
         },
     });
 });
 
 document.onkeydown = function (e) {
-    if (parttree === null) {
+    if (parttree === null || parttree.activeNode === null || drawingWin === true)
         return;
-    }
-
-    if (parttree.activeNode === null) {
-        return;
-    }
 
     if (parttree.activeNode.key) {
         console.log(e.key);
@@ -93,49 +160,52 @@ document.onkeydown = function (e) {
         }
         else if (e.key === 'r' || e.key === 'R') {
             if (!parttree.activeNode.data.ntype.startsWith('A')) {
-                alert('You can only rename an assembly') ;
-                return ;
+                alert('You can only rename an assembly');
+                return;
             }
 
             while (true) {
                 abbrev = window.prompt('Enter Abbreviation For This Assembly (leave blank to inherit from parent)');
                 if (abbrev === null) {
-                    return ;
+                    return;
                 }
 
                 if (abbrev.length === 0 || /^[a-zA-Z]+$/.test(abbrev)) {
-                    break ;
+                    break;
                 }
 
-                alert('Abbreviations for assemblies must be all letters') ;
+                alert('Abbreviations for assemblies must be all letters');
             }
 
             // Rename the assembly name
-            window.location.href = "/robots/rename?partno=" + parttree.activeNode.key + "&abbrev=" + abbrev ;
+            window.location.href = "/robots/rename?partno=" + parttree.activeNode.key + "&abbrev=" + abbrev;
 
         } else if (e.key === 'a' || e.key === 'A') {
-            let abbrev = '' ;
+            let abbrev = '';
             while (true) {
                 abbrev = window.prompt('Enter Abbreviation For This Assembly (leave blank to inherit from parent)');
                 if (abbrev === null) {
-                    return ;
+                    return;
                 }
 
                 if (abbrev.length === 0 || /^[a-zA-Z]+$/.test(abbrev)) {
-                    break ;
+                    break;
                 }
 
-                alert('Abbreviations for assemblies must be all letters') ;
+                alert('Abbreviations for assemblies must be all letters');
             }
-            window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=A&abbrev=" + abbrev ;
+            window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=A&abbrev=" + abbrev;
         }
         if (e.key === 'm' || e.key === 'M') {
             window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=M&abbrev=";
         }
+        else if (e.key === 'd' || e.key === 'D') {
+            showDrawingWindow();
+        }
         else if (e.key === 'Delete') {
             if (parttree.activeNode.key === '001-COMP-00001' || parttree.activeNode.key === '001-PRAC-00001') {
                 alert('You cannot delete the top most comp bot or practice bot.');
-                return ;
+                return;
             }
 
             $("#dialog-confirm").html("Are you sure you want to delete this part (" + parttree.activeNode.key + ")?");
