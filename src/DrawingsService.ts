@@ -442,6 +442,8 @@ export class DrawingsService extends DatabaseService {
                 xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
             }
         });
+
+        res.json({});
     }
 
     private async show(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
