@@ -68,7 +68,7 @@ export class DashboardService extends DatabaseService {
         let ret: LooseObject = {} ;
         let robots: LooseObject[] = [] ;
 
-        for (let [key, robot] of this.robots_.robots_) {
+        for (let robot of this.robots_.getRobots()) {
             let nrobot: LooseObject = {};
             nrobot['name'] = robot.name_;
             nrobot['id'] = robot.id_ ;
@@ -332,7 +332,7 @@ export class DashboardService extends DatabaseService {
     }          
 
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
-        xeroDBLoggerLog('DEBUG', "HistoryService: rest api '" + req.path + "'");
+        xeroDBLoggerLog('DEBUG', "DashboardService: rest api '" + req.path + "'");
 
         let u: User | null = this.users_.userFromRequest(req);
         if (u === null) {

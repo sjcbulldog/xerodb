@@ -677,7 +677,7 @@ export class UserService extends DatabaseService {
         });
 
         let roles: string[] = ['admin', 'mentor'];
-        this.addUser('admin', 'grond1425', 'Griffin', 'Butch', 'butchg@comcast.net', UserService.stateActive, roles);
+        this.addUser('admin', 'password', 'Doe', 'John', '', UserService.stateActive, roles);
     }
 
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
@@ -751,7 +751,7 @@ export class UserService extends DatabaseService {
                 }
                 else {
                     let msg: string = 'the user or password given are not valid';
-                    res.send(createMessageHtml('Invalid Login', msg));
+                    res.send(createMessageHtml('Invalid Login', msg, '<a href="/nologin/login.html">Go to login page</a>'));
                 }
             }
             handled = true;
@@ -843,7 +843,7 @@ export class UserService extends DatabaseService {
                         }
                         else {
                             this.changePassword(u, req.body.newpwd);
-                            res.redirect("/menu");
+                            res.redirect("/normal/dashdef.html");
                         }
                     }
                     handled = true;

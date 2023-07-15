@@ -16,9 +16,7 @@ function tellLogin() {
 }
 
 function populateLateChart(data) {
-    if (statechart !== undefined) {
-        $('#canvas2').replaceWith('<canvas id="canvas2"></canvas>');
-    }
+    $('#canvas2').replaceWith('<canvas id="canvas2"></canvas>');
 
     let ctx = document.getElementById('canvas2');
     new Chart(ctx,
@@ -48,9 +46,7 @@ function populateLateChart(data) {
 }
 
 function populateStateChart(data) {
-    if (statechart !== undefined) {
-        $('#canvas1').replaceWith('<canvas id="canvas1"></canvas>');
-    }
+    $('#canvas1').replaceWith('<canvas id="canvas1"></canvas>');
 
     let mydata = []
 

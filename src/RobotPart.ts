@@ -1,3 +1,4 @@
+import { PartDrawing } from "./PartDrawing";
 import { PartNumber } from "./PartNumber";
 
 export class RobotPart {
@@ -16,6 +17,7 @@ export class RobotPart {
     links_: string[] ;
     donedate_: string;
     nextdate_: string;
+    drawings_: PartDrawing[] ;
     attribs_ : Map<string, string> ;
 
     constructor(parent: PartNumber | null, num: PartNumber, state: string, quantity: number, desc: string, 
@@ -36,6 +38,7 @@ export class RobotPart {
         this.links_ = links ;
         this.donedate_ = donedate ;
         this.nextdate_ = nextdate;
+        this.drawings_ = [] ;
         if (attribs)
             this.attribs_ = attribs ;
         else

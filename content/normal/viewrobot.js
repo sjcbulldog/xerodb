@@ -1,78 +1,4 @@
 var parttree = null;
-var drawingWin = false;
-
-function showDrawingWindow() {
-    if (parttree === null || parttree.activeNode === null)
-        return;
-
-    let html = `
-    <div>
-        <div style="width: 50%; float: left;">
-            <b>Files:</b></br>
-            <select id="files" multiple size=4 style="width: 240px;"></select>
-            <input type="button" id="deletefile" name="deletefile" value="Delete"></input>
-        </div>
-        <div style="width: 50%; float: left;">
-            <b>Links:</b><br>
-            <select id="files" multiple size=4 style="width: 240px;"></select>
-            <input type="button" id="deletelink" name="deletelink" value="Delete"></input>
-        </div>
-    </div>
-    <div style="margin-bottom: 10px;">&nbsp;</div>
-    <hr>
-    <b>New Drawing File</b>
-    <br>
-    <label for="desc">Description:</label>
-    <input type="text" id="desc" name="desc" value=""></input>
-    <br>
-    <label for="upload">File To Upload:</label>
-    <input type="file" id="upload" name="upload"></input>
-    <br>
-    <input type="button" id="doupload" name="doupload" value="Upload"></input>` ;
-
-    $("#dialog-confirm").html(html);
-
-    document.getElementById('doupload').addEventListener('click', function (e) {
-        var filesel = document.getElementById('upload');
-        var desc = document.getElementById('desc');
-        if (filesel.value.length === 0) {
-            alert("No file has been selected.  You must select a file to upload a new drawing for a part.");
-        }
-        else if (desc.length === 0) {
-            alert("No description was provided for the new drawing file.  A description is required.");
-        }
-        else {
-            var myFormData = new FormData();
-            myFormData.append('drawing', filesel.files[0]);
-            myFormData.append('partno', parttree.activeNode.key);
-            myFormData.append('desc', desc.value);
-
-            $.ajax({
-                url: '/robots/adddrawing',
-                type: 'POST',
-                processData: false, // important
-                contentType: false, // important
-                dataType: 'json',
-                data: myFormData
-            });
-        }
-    });
-
-    drawingWin = true;
-    $("#dialog-confirm").dialog({
-        resizable: false,
-        modal: true,
-        title: "Edit Drawings",
-        height: 384,
-        width: 576,
-        buttons: {
-            "Close": function () {
-                $(this).dialog('close');
-                drawingWin = false ;
-            }
-        }
-    });
-}
 
 function updateCosts() {
     $.getJSON('/robots/totalcost?robotid=' + robotid, (data) => {
@@ -95,6 +21,7 @@ document.addEventListener("DOMContentLoaded", (event) => {
         },
         columns: [
             { id: "*", title: "Part Number", width: "300px" },
+            { id: "drawingscount", title: "Drawings:", width: "100px"},
             { id: "student", title: "Student", width: "90px" },
             { id: "mentor", title: "Mentor", width: "90px" },
             { id: "ntype", title: "Type", width: "110px" },
@@ -141,7 +68,12 @@ document.addEventListener("DOMContentLoaded", (event) => {
             },
         },
         dblclick: function (e) {
-            window.location.href = "/robots/editpart?partno=" + e.node.key + "&parttype=" + e.node.data.ntype + "&retplace=/robots/viewrobot$$$ROBOTID$$$";
+            if (e.info.colDef.id === "drawingscount") {
+                window.location.href = "/drawings/drawings?partno=" + e.node.key ;
+            }
+            else {
+                window.location.href = "/robots/editpart?partno=" + e.node.key + "&parttype=" + e.node.data.ntype + "&retplace=/robots/viewrobot$$$ROBOTID$$$";
+            }
         },
         enhanceTitle: function (e) {
             e.titleSpan.title = e.node.data.desc;
@@ -150,7 +82,7 @@ document.addEventListener("DOMContentLoaded", (event) => {
 });
 
 document.onkeydown = function (e) {
-    if (parttree === null || parttree.activeNode === null || drawingWin === true)
+    if (parttree === null || parttree.activeNode === null)
         return;
 
     if (parttree.activeNode.key) {
@@ -200,7 +132,7 @@ document.onkeydown = function (e) {
             window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=M&abbrev=";
         }
         else if (e.key === 'd' || e.key === 'D') {
-            showDrawingWindow();
+            window.location.href = "/robots/drawings?partno=" + e.node.key ;
         }
         else if (e.key === 'Delete') {
             if (parttree.activeNode.key === '001-COMP-00001' || parttree.activeNode.key === '001-PRAC-00001') {

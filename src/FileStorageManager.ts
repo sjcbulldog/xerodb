@@ -40,7 +40,9 @@ export class FileStorageManager {
 
         fs.writeFile(name, contents,  "binary", function(err) 
             { 
-                throw err;
+                if (err) {
+                    throw err;
+                }
             });
         return name ;
     }

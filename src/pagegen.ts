@@ -4,7 +4,14 @@ import * as fs from 'fs' ;
 
 let config: XeroDBConfig = XeroDBConfig.getXeroDBConfig();
 
-export function createMessageHtml(title: string, msg: string) : string {
+export function createMessageHtml(title: string, msg: string, next?: string | undefined) : string {
+  let nextpage: string ;
+  if (next) {
+    nextpage = next ;
+  }
+  else {
+    nextpage = `<a href="/menu">Return to menu</a>`;
+  }
   let ret: string = 
     ` <!DOCTYPE html>
       <head>
@@ -17,8 +24,8 @@ export function createMessageHtml(title: string, msg: string) : string {
             <p>$$$MESSAGE$$$</p>
             <p></p>
             <p></p>
-            <a href="/menu">Return to menu</a>
-          </section>
+            ` + nextpage + 
+          `</section>
         </div>
       </body>
   `

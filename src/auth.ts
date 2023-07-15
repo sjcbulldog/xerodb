@@ -6,7 +6,8 @@ import { User } from './User';
 export function isLoggedIn(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) : boolean {
 
     if (req.cookies.xeropartdb === undefined) {
-        res.status(403).send(createMessageHtml('Error', 'you are not logged in - 1!'));
+        res.status(403).send(createMessageHtml('Error', 'you are not logged in - 1!', 
+                                '<a href="/nologin/login.html">Go to login page</a>'));
         return false ;
     }
 

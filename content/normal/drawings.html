@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link rel="stylesheet" href="/normal/drawings.css">
+        <script type="text/javascript" src="/nologin/jquery/jquery-3.7.0.js"></script>
+        <script type="text/javascript" src="/nologin/jquery/jquery-ui.js"></script>
+        <script type="text/javascript" src="/normal/drawings.js"></script>
+        <link rel="stylesheet" href="/nologin/jquery/jquery-ui.css" />
+        
+        <link rel="stylesheet" media="screen" href="/nologin/wunderbaum/wunderbaum.css" />
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.9.0/font/bootstrap-icons.css" />
+        <script type="text/javascript" src="/nologin/wunderbaum/wunderbaum.umd.js"></script>
+
+        <title id="maintitle">Drawings</title>
+    </head>
+    <body>
+        <div id="dialog-confirm"></div>
+        <div id="drawtitle">Drawings:</div>
+        <div id="drawingtable"></div>
+        <br>
+        <input type="button" value="New Drawing" onclick="newDrawing()" />
+        <input type="button" value="New Drawing Version" onclick="newDrawingVersion()" />
+        <input type="button" value="New Link" onclick="newLink()" />
+        <input type="button" value="New Link Version" onclick="newLinkVersion()" />
+        <input type="button" value="Delete" onclick="deleteCurrent()" />
+
+        <script> 
+            var partnovalue="$$$PARTNO$$$";
+        </script>
+    </body>
+</html>

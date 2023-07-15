@@ -204,7 +204,7 @@ export class AuditService extends DatabaseService {
     }    
 
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
-        xeroDBLoggerLog('DEBUG', "HistoryService: rest api '" + req.path + "'");
+        xeroDBLoggerLog('DEBUG', "AuditService: rest api '" + req.path + "'");
 
         let handled: boolean = false;
 
@@ -218,7 +218,7 @@ export class AuditService extends DatabaseService {
         }
 
         if (!handled) {
-            let msg: string = 'unknown history REST API request "' + req.path + "'";
+            let msg: string = 'unknown audit REST API request "' + req.path + "'";
             res.status(404).send(createMessageHtml('Unknown Request', msg));
         }
         

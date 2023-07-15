@@ -14,7 +14,8 @@ import { AuditService } from './AuditService';
 import { NextState, PartState } from './PartState';
 import { sendEmail } from './mail';
 import { packFiles, packLinks, unpackFiles, unpackLinks } from './dbutils';
-import { FileStorageManager } from './FileStorageManager';
+import { PartDrawing } from './PartDrawing';
+import { DrawingsService } from './DrawingsService';
 
 interface LooseObject {
     [key: string]: any
@@ -206,11 +207,11 @@ export class RobotService extends DatabaseService {
             ]),
     ] ;    
 
-    nextkey_: number;
-    robots_: Map<number, Robot>;
-    users_: UserService;
-    audit_: AuditService;
-    fsmgr_ : FileStorageManager;
+    private nextkey_: number;
+    private robots_: Map<number, Robot>;
+    private users_: UserService;
+    private drawings_: DrawingsService | null;
+    private audit_: AuditService;
 
     constructor(rootdir: string, users: UserService, audit: AuditService) {
         super('RobotService', path.join(rootdir, RobotService.robotFileName));
@@ -219,7 +220,7 @@ export class RobotService extends DatabaseService {
         this.audit_ = audit ;
         this.nextkey_ = 1;
         this.robots_ = new Map<number, Robot>();
-        this.fsmgr_ = new FileStorageManager(path.join(rootdir, 'files'));
+        this.drawings_ = null ;
 
         this.loadAll() ;
     }
@@ -283,21 +284,7 @@ export class RobotService extends DatabaseService {
                     throw new Error(msg)
                 }
             }); 
-            
-        sql =
-            `CREATE TABLE drawings (
-                partno text not null,
-                filename text not null,
-                localfile text not null,
-                desc text not null);
-            ` ;
-            this.db().exec(sql, (err) => {
-                if (err) {
-                    let msg: string = this.name() + ": cannot create table 'drawings' in RobotService" ;
-                    xeroDBLoggerLog('ERROR', msg);
-                    throw new Error(msg)
-                }
-            });    
+  
     }
 
     private loadAll() {
@@ -345,23 +332,12 @@ export class RobotService extends DatabaseService {
         }) ;
     }
 
-    private storeFile(partno: string, name: string, desc: string, data:Buffer) : string {
-        let fname: string = this.fsmgr_.storeFile(data);
-
-        let sql = 'INSERT INTO drawings VALUES (';
-            sql += "'" + partno + "',";
-            sql += "'" + name + "',";
-            sql += "'" + fname + "',";
-            sql += "'" + desc + "');";
-
-            this.db().exec(sql, (err) => {
-                if (err) {
-                }
-                else {
-                }
-            });
-        
-        return fname ;
+    public setDrawingsService(service: DrawingsService) {
+        this.drawings_ = service ;
+    }
+    
+    public getRobots() : IterableIterator<Robot> {
+        return this.robots_.values();
     }
 
     private diffAttribs(current: Map<string, string>, old: Map<string, string>) : string[] {
@@ -923,6 +899,9 @@ export class RobotService extends DatabaseService {
                 }
                 for (let row of rows) {
                     retval = this.extractPartFromRow(row);
+                    if (retval !== null && this.drawings_ !== null) {
+                        retval.drawings_ = await this.drawings_.getDrawings(partno);
+                    }
                     break;
                 }
                 resolve(retval);
@@ -945,7 +924,8 @@ export class RobotService extends DatabaseService {
                 else {
                     for (let row of rows) {
                         let partobj: RobotPart | null = this.extractPartFromRow(row);
-                        if (partobj !== null) {
+                        if (partobj !== null && this.drawings_ !== null) {
+                            partobj.drawings_ = await this.drawings_.getDrawings(partobj.part_);
                             retval.push(partobj);
                         }
                     }
@@ -1081,6 +1061,32 @@ export class RobotService extends DatabaseService {
         if (part.type_ === RobotService.partTypeAssembly) {
             ret['folder'] = true;
         }
+
+        let drawings: LooseObject[] = [] ;
+        for(let one of part.drawings_) {
+            if (one.remote_file_ === undefined) {
+                drawings.push(
+                    {
+                        type: 'link',
+                        url: one.file_or_url_,
+                        desc: one.desc_
+                    }
+                ) ;
+            }
+            else {
+                drawings.push(
+                    {
+                        type: 'file',
+                        name: one.remote_file_,
+                        url: one.file_or_url_,
+                        desc: one.desc_
+                    }
+                ) ;
+            }
+        }
+
+        ret['drawings'] = drawings ;
+        ret['drawingscount'] = drawings.length ;
 
         return ret;
     }
@@ -1895,13 +1901,6 @@ export class RobotService extends DatabaseService {
         res.redirect(url);
     }
 
-    private async adddrawing(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
-        let lobj : LooseObject = req as LooseObject ;
-        let fname: string = this.storeFile(req.body.partno, lobj.files.drawing.name, req.body.desc, lobj.files.drawing.data);
-        console.log(req);
-        res.json({});
-    }
-
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         xeroDBLoggerLog('DEBUG', "RobotService: rest api '" + req.path + "'");
 
@@ -1980,10 +1979,6 @@ export class RobotService extends DatabaseService {
         }
         else if (req.path === '/robots/rename') {
             this.rename(u, req, res);
-            handled = true ;
-        }
-        else if (req.path === '/robots/adddrawing') {
-            this.adddrawing(u, req, res);
             handled = true ;
         }
 

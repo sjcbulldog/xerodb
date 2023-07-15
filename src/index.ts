@@ -16,6 +16,7 @@ import FileUpload from 'express-fileupload';
 import { xeroDBLoggerInit, xeroDBLoggerLog } from './logger';
 import { AuditService } from './AuditService';
 import { DashboardService } from './DashboardService';
+import { DrawingsService } from './DrawingsService';
 
 
 const nologinName: string = "/nologin/*";
@@ -29,6 +30,7 @@ const auditsrv: AuditService = new AuditService(config.dataDir());
 const usersrv: UserService = new UserService(config.dataDir(), auditsrv);
 const robotsrv: RobotService = new RobotService(config.dataDir(),usersrv, auditsrv);
 const dashboardsrv: DashboardService = new DashboardService(config.dataDir(), robotsrv, usersrv) ;
+const drawingssrv: DrawingsService = new DrawingsService(config.dataDir(), robotsrv, usersrv);
 
 const app: Express = express();
 
@@ -156,7 +158,24 @@ app.all('/dashboard/*', (req, res) => {
       xeroDBLoggerLog('ERROR', 'exception caught for URL "' + req.url + '"');
       res.status(500).send(createMessageHtml('Internal Error', 'internal error - exception thrown - check log file'));
     }
-  });
+});
+
+app.all('/drawings/*', (req, res) => {
+    try {
+      drawingssrv.get(req, res);
+    }
+    catch (err) {
+      let errobj: Error = err as Error;
+  
+      if (errobj !== undefined) {
+        if (errobj.stack !== undefined) {
+          xeroDBLoggerLog('DEBUG', errobj.stack.toString());
+        }
+      }
+      xeroDBLoggerLog('ERROR', 'exception caught for URL "' + req.url + '"');
+      res.status(500).send(createMessageHtml('Internal Error', 'internal error - exception thrown - check log file'));
+    }
+});
 
 app.all('/menu', (req, res) => {
   if (useDashboard) {
