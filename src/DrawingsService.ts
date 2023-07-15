@@ -1,4 +1,5 @@
 import path from "path";
+import fs from "fs";
 import { DatabaseService } from "./DatabaseService";
 import { RobotService } from "./RobotService";
 import { User } from "./User";
@@ -84,6 +85,46 @@ export class DrawingsService extends DatabaseService {
                             ret.push(new PartDrawing(version, set, filename, desc));
                     }
                     resolve(ret);
+                }
+            });            
+        }) ;
+        return ret ;
+    }
+
+    public getOneDrawing(partno: PartNumber, setno: number, version: number) : Promise<PartDrawing> {
+        let ret: Promise<PartDrawing> = new Promise<PartDrawing>((resolve, reject) => {
+            let sql = "select partno, version, setno, filename, localfile, desc from drawings where partno='" + partno.toString() + 
+                        "' AND setno=" + setno + " AND version=" + version ;
+            this.db().all(sql, async (err, rows) => {
+                if (err) {
+                    reject(err);
+                }
+                else {
+                    let retval: PartDrawing ;
+
+                    let row = rows[0];
+                    let obj: Object = row as Object;
+                    type ObjectKey = keyof typeof obj;
+                    const partnoKey = 'partno' as ObjectKey;
+                    const versionKey = 'version' as ObjectKey;
+                    const setKey = 'setno' as ObjectKey;
+                    const filenameKey = 'filename' as ObjectKey;
+                    const descKey = 'desc' as ObjectKey;
+                    const localfileKey = 'localfile' as ObjectKey ;
+
+                    let partno = (obj[partnoKey] as unknown) as string;
+                    let version = (obj[versionKey] as unknown) as number ;
+                    let set = (obj[setKey] as unknown) as number ;
+                    let filename = (obj[filenameKey] as unknown) as string;
+                    let desc = (obj[descKey] as unknown) as string;
+                    let localfile = (obj[localfileKey] as unknown) as string ;                    
+
+                    if (localfile.length > 0)
+                        retval = new PartDrawing(version, set, localfile, desc, filename) ;
+                    else
+                        retval = new PartDrawing(version, set, filename, desc);
+
+                    resolve(retval);
                 }
             });            
         }) ;
@@ -387,7 +428,7 @@ export class DrawingsService extends DatabaseService {
         }
 
         let version: number = parseInt(req.body.version) ;
-        if (isNaN(setnum)) {
+        if (isNaN(version)) {
             res.send(createMessageHtml('Error', 'invalid api REST request /drawings/delete - invalid drawing version'));
             return;
         }
@@ -401,6 +442,43 @@ export class DrawingsService extends DatabaseService {
                 xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
             }
         });
+    }
+
+    private async show(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        if (req.query.partno === undefined) {
+            res.json({ error: 'invalid api REST request /drawings/show - missing query parameters'});
+            return;
+        }
+
+        let partno: PartNumber | null = PartNumber.fromString(req.query.partno) ;
+        if (partno === null) {
+            res.json({ error: 'invalid ROBOT api REST request /drawings/show - invalid part number'});
+            return;
+        }
+
+        let setnum: number = parseInt(req.query.set) ;
+        if (isNaN(setnum)) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /drawings/show - invalid drawing set'));
+            return;
+        }
+
+        let version: number = parseInt(req.query.version) ;
+        if (isNaN(version)) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /drawings/show - invalid drawing version'));
+            return;
+        }
+
+        let drawing: PartDrawing = await this.getOneDrawing(partno, setnum, version) ;
+
+        if (drawing.isLink()) {
+            res.redirect(drawing.file_or_url_) ;
+        }
+        else {
+            let buffer: Buffer = fs.readFileSync(drawing.file_or_url_);
+            let ext: string = path.extname(drawing.remote_file_!);
+            res.type(ext);
+            res.send(buffer);
+        }
     }
 
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
@@ -445,6 +523,10 @@ export class DrawingsService extends DatabaseService {
         }
         else if (req.path === '/drawings/delete') {
             this.delete(u, req, res);
+            handled = true ;
+        }
+        else if (req.path === '/drawings/show') {
+            this.show(u, req, res);
             handled = true ;
         }
 

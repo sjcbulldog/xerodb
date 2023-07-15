@@ -13,4 +13,8 @@ export class PartDrawing {
         this.desc_ = desc ;
         this.remote_file_ = name ;
     }
+
+    public isLink() : boolean {
+        return this.remote_file_ === undefined || this.remote_file_.length === 0 ;
+    }
 }
