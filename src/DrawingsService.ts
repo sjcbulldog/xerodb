@@ -52,7 +52,8 @@ export class DrawingsService extends DatabaseService {
 
     public getDrawings(partno: PartNumber) : Promise<PartDrawing[]> {
         let ret: Promise<PartDrawing[]> = new Promise<PartDrawing[]>((resolve, reject) => {
-            let sql = "select partno, version, setno, filename, localfile, desc from drawings where partno='" + partno.toString() + "' order by setno" ;
+            let sql = "select partno, version, setno, filename, localfile, desc from drawings where partno='" + partno.toString() + 
+                        "' order by setno, version" ;
             this.db().all(sql, async (err, rows) => {
                 if (err) {
                     reject(err);
@@ -89,6 +90,28 @@ export class DrawingsService extends DatabaseService {
         return ret ;
     }
 
+    private storeLink(partno: string, version: number, set: number, desc: string, link: string) : Promise<void> {
+        let ret: Promise<void> = new Promise<void>(async (resolve, reject) => {
+            let sql = 'INSERT INTO drawings VALUES (';
+                sql += "'" + partno + "',";
+                sql += "'',";
+                sql += "'" + link + "',";
+                sql += version + ",";
+                sql += set + "," ;
+                sql += "'" + desc + "');";
+
+            await this.db().exec(sql, (err) => {
+                if (err) {
+                    reject(err);
+                }
+            });
+            
+            resolve() ;
+        }) ;
+
+        return ret;
+    }
+
     private storeFile(partno: string, name: string, version: number, set: number, desc: string, data:Buffer) : Promise<string> {
         let ret: Promise<string> = new Promise<string>(async (resolve, reject) => {
             let fname: string = this.fsmgr_.storeFile(data);
@@ -103,8 +126,7 @@ export class DrawingsService extends DatabaseService {
 
             await this.db().exec(sql, (err) => {
                 if (err) {
-                }
-                else {
+                    reject(err);
                 }
             });
             
@@ -148,11 +170,13 @@ export class DrawingsService extends DatabaseService {
         let ret: LooseObject[] = [] ;
 
         if (drawings.length > 0) {
+            let curset: number = 0 ;
             for(let one of drawings) {
                 let lobj: LooseObject = {} ;
-                if (one.version_ === 1) {
+                if (one.set_ !== curset) {
                     // This is a new entry in a set, put the full line
                     lobj.title = one.desc_ ;
+                    curset = one.set_ ;
                 }
                 else {
                     // This is a different version, 
@@ -165,7 +189,7 @@ export class DrawingsService extends DatabaseService {
                 }
                 else {
                     lobj.dtype = 'Drawing Link' ;
-                    lobj.filename = '' ;
+                    lobj.filename = one.file_or_url_ ;
                 }
 
                 lobj.version = one.version_ ;
@@ -204,8 +228,7 @@ export class DrawingsService extends DatabaseService {
         let fname: string = await this.storeFile(req.body.partno, lobj.files.drawing.name, 1, setnum, req.body.desc, 
                                                     lobj.files.drawing.data);
 
-        let ret: LooseObject = { filename: lobj.files.drawing.name, desc: req.body.desc } ;
-        res.json(ret);
+        res.json({});
     }
 
     private async adddrawingversion(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
@@ -237,15 +260,71 @@ export class DrawingsService extends DatabaseService {
         let fname: string = await this.storeFile(req.body.partno, lobj.files.drawing.name, version, setnum, req.body.desc, 
                                                     lobj.files.drawing.data);
                                                     
-        let ret: LooseObject = { filename: lobj.files.drawing.name, desc: req.body.desc } ;
-        res.json(ret);
+        res.json({});
     }
 
     private async addlink(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        if (req.body.partno === undefined) {
+            res.json({ error: 'invalid api REST request /drawings/editpart - missing query parameters'});
+            return;
+        }
+
+        let partno: PartNumber | null = PartNumber.fromString(req.body.partno) ;
+        if (partno === null) {
+            res.json({ error: 'invalid ROBOT api REST request /drawings/editpart - invalid part number'});
+            return;
+        }
+
+        if (req.body.link === undefined) {
+            res.json({ error: 'invalid api REST request /drawings/editpart - missing query parameters'});
+            return;            
+        }
+
+        let setnum: number ;
+        
+        try {
+            setnum = await this.getNewSetNumber(req.body.partno);
+        }
+        catch(err) {
+            let errobj: Error = err as Error ;
+            res.json({error: errobj.message}) ;
+            return ;
+        }
+
+        let lobj : LooseObject = req as LooseObject ;
+        await this.storeLink(req.body.partno, 1, setnum, req.body.desc, req.body.link);
+
         res.json({});
     }
     
     private async addlinkversion(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        if (req.body.partno === undefined) {
+            res.json({ error: 'invalid api REST request /drawings/editpart - missing query parameters'});
+            return;
+        }
+
+        let partno: PartNumber | null = PartNumber.fromString(req.body.partno) ;
+        if (partno === null) {
+            res.json({ error: 'invalid ROBOT api REST request /drawings/editpart - invalid part number'});
+            return;
+        }
+
+        if (req.body.link === undefined) {
+            res.json({ error: 'invalid api REST request /drawings/editpart - missing query parameters'});
+            return;            
+        }
+
+        let setnum: number = parseInt(req.body.set) ;
+        if (isNaN(setnum)) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /drawings/adddrawingversion - invalid drawing set'));
+            return;
+        }
+
+        let version: number = await this.getNewVersionNumber(partno, setnum) ;
+
+        let lobj : LooseObject = req as LooseObject ;
+        await this.storeLink(req.body.partno, version, setnum, req.body.desc, req.body.link);
+
         res.json({});
     }
 
@@ -289,6 +368,41 @@ export class DrawingsService extends DatabaseService {
         res.json(json);
     }
 
+    private async delete(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        if (req.body.partno === undefined) {
+            res.json({ error: 'invalid api REST request /drawings/delete - missing query parameters'});
+            return;
+        }
+
+        let partno: PartNumber | null = PartNumber.fromString(req.body.partno) ;
+        if (partno === null) {
+            res.json({ error: 'invalid ROBOT api REST request /drawings/delete - invalid part number'});
+            return;
+        }
+
+        let setnum: number = parseInt(req.body.set) ;
+        if (isNaN(setnum)) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /drawings/delete - invalid drawing set'));
+            return;
+        }
+
+        let version: number = parseInt(req.body.version) ;
+        if (isNaN(setnum)) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /drawings/delete - invalid drawing version'));
+            return;
+        }
+
+        let sql = "DELETE from drawings where partno='" + req.body.partno + "' AND setno=" + setnum + 
+                        " AND version=" + version ;
+        
+        this.db().exec(sql, (err) => {
+            if (err) {
+                xeroDBLoggerLog('ERROR', 'RobotService: failed to update part (delete)time - ' + err.message);
+                xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
+            }
+        });
+    }
+
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         xeroDBLoggerLog('DEBUG', "HistoryService: rest api '" + req.path + "'");
 
@@ -327,6 +441,10 @@ export class DrawingsService extends DatabaseService {
         }
         else if (req.path === '/drawings/drawingslist') {
             this.drawingslist(u, req, res);
+            handled = true ;
+        }
+        else if (req.path === '/drawings/delete') {
+            this.delete(u, req, res);
             handled = true ;
         }
 
