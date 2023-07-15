@@ -6,6 +6,7 @@ import { RobotService } from "./RobotService";
 import { UserService } from "./UserService";
 import { User } from "./User";
 import { RobotPart } from "./RobotPart";
+import { PartNumber } from "./PartNumber";
 
 interface LooseObject {
     [key: string]: any
@@ -331,6 +332,54 @@ export class DashboardService extends DatabaseService {
         res.json(ret) ;
     }          
 
+    private descend(part: RobotPart, quantity: number, total: Map<string, number>, parts: RobotPart[]) {
+        if (part.state_ === RobotService.stateReadyToOrder) {
+            if (total.has(part.description_)) {
+                let numtot: number = part.quantity_ * quantity + total.get(part.description_)!;
+                total.set(part.description_, numtot);
+            }
+            else {
+                total.set(part.description_, quantity * part.quantity_);
+            }
+        }
+        else if (part.type_ === RobotService.partTypeAssembly) {
+            for(let one of parts) {
+                if (one.isChildOf(part.part_)) {
+                    this.descend(one, quantity * one.quantity_, total, parts) ;
+                }
+            }
+        }
+    }
+
+    private async order(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        if (req.query.robotid === undefined) {
+            res.json(['invalid api REST request /robots/viewrobot - missing required parameters']) ;
+            return;
+        }
+
+        let rid: number = parseInt(req.query.robotid, 10) ;
+        if (isNaN(rid)) {
+            res.json({error: 'invalid api REST request /robots/viewrobot - invalid robot id'}) ;
+            return;            
+        }
+
+        let type: string = 'next' ;
+        if (req.query.type !== undefined)
+            type = req.query.type ;
+
+        let parts: RobotPart[] = await this.robots_.getPartsForRobot(rid);
+        let total: Map<string, number> = new Map<string, number>() ;
+        let p: RobotPart | null = RobotService.findPartById(new PartNumber(rid, 'COMP', 1), parts) ;
+        if (p !== null) {
+            this.descend(p, 1, total, parts);
+        }
+
+        p = RobotService.findPartById(new PartNumber(rid, 'PRAC', 1), parts) ;
+        if (p !== null) {
+            this.descend(p, 1, total, parts);
+        }
+    }
+
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         xeroDBLoggerLog('DEBUG', "DashboardService: rest api '" + req.path + "'");
 
@@ -377,6 +426,10 @@ export class DashboardService extends DatabaseService {
         }
         else if (req.path === '/dashboard/setrobot') {
             this.setrobot(u, req, res);
+            handled = true ;
+        } 
+        else if (req.path === '/dashboard/order') {
+            this.order(u, req, res) ;
             handled = true ;
         }
 

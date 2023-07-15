@@ -22,30 +22,29 @@ interface LooseObject {
 };
 
 export class RobotService extends DatabaseService {
-    private static readonly robotFileName: string = 'robot.db';
-    private static readonly partTypeCOTS: string = 'C';
-    private static readonly partTypeAssembly: string = 'A';
-    private static readonly partTypeManufactured: string = 'M';
+    public static readonly robotFileName: string = 'robot.db';
+    public static readonly partTypeCOTS: string = 'C';
+    public static readonly partTypeAssembly: string = 'A';
+    public static readonly partTypeManufactured: string = 'M';
 
-    private static readonly stateUnassigned: string = "Unassigned" ;
-    private static readonly stateAssigned: string = "Assigned" ;
-    private static readonly stateReadyToOrder: string = "Ready To Order" ;
-    private static readonly stateOrdered: string = "Ordered" ;
-    private static readonly stateWaitingForParts: string = "Waiting For Parts" ;
-    private static readonly stateReadyForAssembly: string = "Ready For Assembly" ;
-    private static readonly stateInAssembly: string = "In Assembly" ;
-    private static readonly stateReadyForMentorCheck: string = "Ready For Mentor Check"
-    private static readonly stateReadyForCAD: string = "Ready For CAD" ;
-    private static readonly stateInCAD: string = "In CAD" ;
-    private static readonly stateReadyForDrawingCheck: string = "Ready For Drawing Check" ;
-    private static readonly stateReadyForCAM: string = "Ready For CAM" ;
-    private static readonly stateInCAM: string = "In CAM" ;
-    private static readonly stateReadyForBuild: string = "Ready For Build" ;
-    private static readonly stateInBuild: string = "In Build" ;
-    private static readonly stateReadyForBuildCheck: string = "Ready For Build Check" ;    
-    private static readonly stateDone: string = "Done" ;
+    public static readonly stateUnassigned: string = "Unassigned" ;
+    public static readonly stateAssigned: string = "Assigned" ;
+    public static readonly stateReadyToOrder: string = "Ready To Order" ;
+    public static readonly stateOrdered: string = "Ordered" ;
+    public static readonly stateWaitingForParts: string = "Waiting For Parts" ;
+    public static readonly stateReadyForAssembly: string = "Ready For Assembly" ;
+    public static readonly stateInAssembly: string = "In Assembly" ;
+    public static readonly stateReadyForMentorCheck: string = "Ready For Mentor Check"
+    public static readonly stateReadyForCAD: string = "Ready For CAD" ;
+    public static readonly stateInCAD: string = "In CAD" ;
+    public static readonly stateReadyForDrawingCheck: string = "Ready For Drawing Check" ;
+    public static readonly stateReadyForCAM: string = "Ready For CAM" ;
+    public static readonly stateInCAM: string = "In CAM" ;
+    public static readonly stateReadyForBuild: string = "Ready For Build" ;
+    public static readonly stateInBuild: string = "In Build" ;
+    public static readonly stateReadyForBuildCheck: string = "Ready For Build Check" ;    
+    public static readonly stateDone: string = "Done" ;
 
-    private static readonly methodAssignStudentAndMentor = "assign-to" ;
     private static readonly methodStudent = "student" ;
     private static readonly methodMentor = "mentor" ;
     private static readonly methodAnyone = "anyone" ;
@@ -92,6 +91,8 @@ export class RobotService extends DatabaseService {
         new PartState(RobotService.stateAssigned, 
             [
                 new NextState(RobotService.stateReadyToOrder, RobotService.methodStudent),
+                new NextState(RobotService.stateOrdered, RobotService.methodMentor),
+                new NextState(RobotService.stateDone, RobotService.methodAnyone),
             ]),
         new PartState(RobotService.stateReadyToOrder,
             [
@@ -681,7 +682,7 @@ export class RobotService extends DatabaseService {
         return ret;
     }
 
-    private async createNewPart(u: User, parent: PartNumber | null, partno: PartNumber, state: string, type: string, desc: string, 
+    private async createNewPart(u: User, parent: PartNumber | null, partno: PartNumber, quantity: number, state: string, type: string, desc: string, 
                                     attribs: Map<string, string>, student: string, mentor: string): Promise<void> {
         let sql = 'INSERT INTO parts VALUES (';
         if (parent === null) {
@@ -694,7 +695,7 @@ export class RobotService extends DatabaseService {
         sql += "'" + state + "'," ;
         sql += "'" + student + "'," ;
         sql += "'" + mentor + "'," ;
-        sql += String(1) + ",";
+        sql += quantity + ",";
         sql += "'" + this.escapeString(desc) + "',";
         sql += "'" + type + "',";
         sql += "'" + u.username_ + "',";
@@ -1091,7 +1092,7 @@ export class RobotService extends DatabaseService {
         return ret;
     }
 
-    private findPartById(partno: PartNumber, parts: RobotPart[]): RobotPart | null {
+    public static findPartById(partno: PartNumber, parts: RobotPart[]): RobotPart | null {
         for (let part of parts) {
             if (part.part_.toString() === partno.toString())
                 return part;
@@ -1124,7 +1125,7 @@ export class RobotService extends DatabaseService {
         let ret: LooseObject[] = [];
 
         for(let top of tops) {
-            let toppart: RobotPart | null = this.findPartById(top, parts);
+            let toppart: RobotPart | null = RobotService.findPartById(top, parts);
             if (toppart !== null) {
                 let topobj: LooseObject = this.partToLoose(null, toppart);
                 ret.push(topobj);
@@ -1165,7 +1166,7 @@ export class RobotService extends DatabaseService {
             if (part.student_.length > 0 && part.mentor_.length > 0) {
                 st = RobotService.stateAssigned ;
             }
-            await this.createNewPart(u, parent, newpartno, st, part.type_, part.description_, 
+            await this.createNewPart(u, parent, newpartno, part.quantity_, st, part.type_, part.description_, 
                                     this.copyAttributes(part.attribs_), part.student_, part.mentor_);
 
             //
@@ -1283,7 +1284,7 @@ export class RobotService extends DatabaseService {
         if (robot !== undefined) {
             let parts: RobotPart[] = await this.getPartsForRobot(rid);
             for(let top of robot.topparts_) {
-                let toppart: RobotPart | null = this.findPartById(top, parts) ;
+                let toppart: RobotPart | null = RobotService.findPartById(top, parts) ;
                 if (toppart !== null) {
                     await this.checkAssembly(u, toppart, parts);
                 }
@@ -1305,8 +1306,8 @@ export class RobotService extends DatabaseService {
         let desc: string = 'Top Level Robot Subsystem' ;
         let comppart: PartNumber = await this.getNextPartNumber(new PartNumber(robotno, 'COMP', 0)) ;
         let pracpart: PartNumber = await this.getNextPartNumber(new PartNumber(robotno, 'PRAC', 0)) ;
-        await this.createNewPart(u, null, comppart, RobotService.stateUnassigned, RobotService.partTypeAssembly, "Competition Robot Top Assembly", attribs, '', '');
-        await this.createNewPart(u, null, pracpart, RobotService.stateUnassigned, RobotService.partTypeAssembly, "Practice Robot Top Assembly", attribs, '', '');
+        await this.createNewPart(u, null, comppart, 1, RobotService.stateUnassigned, RobotService.partTypeAssembly, "Competition Robot Top Assembly", attribs, '', '');
+        await this.createNewPart(u, null, pracpart, 1, RobotService.stateUnassigned, RobotService.partTypeAssembly, "Practice Robot Top Assembly", attribs, '', '');
 
         let current = this.now();
 
@@ -1492,7 +1493,7 @@ export class RobotService extends DatabaseService {
         if (req.query.abbrev && req.query.abbrev.length > 0)
             abbrev = req.query.abbrev ;
         let newpartno: PartNumber = await this.getNextPartNumber(new PartNumber(parent.robot_, abbrev, 0)) ;
-        await this.createNewPart(u, parent, newpartno, RobotService.stateUnassigned, type, RobotService.doubleClickMessage, attribs, '', '') ;
+        await this.createNewPart(u, parent, newpartno, 1, RobotService.stateUnassigned, type, RobotService.doubleClickMessage, attribs, '', '') ;
 
         let url: string = '/robots/viewrobot?robotid=' + parent.robot_ ;
         res.redirect(url);
@@ -1780,7 +1781,7 @@ export class RobotService extends DatabaseService {
         let parts: RobotPart[] = await this.getPartsForRobot(rid);
 
         for(let top of robot.topparts_) {
-            let part: RobotPart | null = this.findPartById(top, parts);
+            let part: RobotPart | null = RobotService.findPartById(top, parts);
             if (part !== null) {
                 if (ret.total === null) {
                     ret.total = this.getCost(part, parts);
@@ -1884,7 +1885,7 @@ export class RobotService extends DatabaseService {
         }
 
         let parts: RobotPart[] = await this.getPartsForRobot(partno.robot_);
-        let part: RobotPart | null = this.findPartById(partno, parts);
+        let part: RobotPart | null = RobotService.findPartById(partno, parts);
         if (part === null) {
             res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/rename - invalid partno'));
             return;

@@ -122,7 +122,7 @@ function createLateTree(which) {
             url: "/dashboard/empty"
         },
         columns: [
-            { id: "*", title: "Part", width: "160px" },
+            { id: "*", title: "Part", width: "250px" },
             { id: "student", title: "Student", width: "120px" },
             { id: "mentor", title: "Mentor", width: "120px" },
             { id: "nextdate", title: "Next Date", width: "120px" },
@@ -156,10 +156,11 @@ function createStateTree(which) {
             url: "/dashboard/empty"
         },
         columns: [
-            { id: "*", title: "Part", width: "300px" },
+            { id: "*", title: "Part", width: "250px" },
             { id: "student", title: "Student", width: "120px" },
             { id: "mentor", title: "Mentor", width: "120px" },
             { id: "nextdate", title: "Next Date", width: "120px" },
+            { id: "donedate", title: "Done Date", width: "120px" },
             { id: "desc", title: "Description" }
         ],
         render: function (e) {
@@ -170,7 +171,8 @@ function createStateTree(which) {
             }
         },
         enhanceTitle: function (e) {
-            e.titleSpan.title = e.node.data.desc;
+            if (e.node.data.desc)
+                e.titleSpan.title = e.node.data.desc;
         },
         dblclick: function (e) {
             if (/^[0-9][0-9][0-9]-[A-Za-z]+-[0-9][0-9][0-9][0-9][0-9]$/.test(e.node.key)) {

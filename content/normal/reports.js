@@ -35,6 +35,17 @@ const reports = [
             { id: "donedate", title: "Done Date", width: "120px" },
             { id: "desc", title: "Description" }
         ]
+    },
+    {
+        name: "Parts To Order",
+        url: "/dashboard/order?",
+        columns: [
+            { id: "*", title: "Part", width: "300px" },
+            { id: "student", title: "Student", width: "120px" },
+            { id: "mentor", title: "Mentor", width: "120px" },
+            { id: "donedate", title: "Done Date", width: "120px" },
+            { id: "desc", title: "Description" }
+        ]
     }
 ]
 

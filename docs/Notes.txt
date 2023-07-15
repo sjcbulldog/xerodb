@@ -10,12 +10,9 @@ TODO
 ----
 Try other screen resolutions
 
-Upload a drawing or add a link cad drawing
-- Drawing link
-- Parts link
+Ready To Order Report - showing quantities
 
 Purchased Assemblies (optionally add vendor)
 
-Generalize Robot Part Types (e.g. COTS, Assembly, Manufactured)
-
+Check: an assembly done date cannot be before the done dates of its children
 

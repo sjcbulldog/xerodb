@@ -10,7 +10,6 @@ function notificationChanged(e) {
             }
         }
     }
-    console.log(e);
 }
 
 function createCell(name, bold) {

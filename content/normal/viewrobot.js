@@ -1,4 +1,5 @@
 var parttree = null;
+var counter = 0 ;
 
 function updateCosts() {
     $.getJSON('/robots/totalcost?robotid=' + robotid, (data) => {
@@ -21,12 +22,12 @@ document.addEventListener("DOMContentLoaded", (event) => {
         },
         columns: [
             { id: "*", title: "Part Number", width: "300px" },
-            { id: "drawingscount", title: "Drawings:", width: "100px"},
+            { id: "drawingscount", title: "Drawings", width: "70px"},
             { id: "student", title: "Student", width: "90px" },
             { id: "mentor", title: "Mentor", width: "90px" },
             { id: "ntype", title: "Type", width: "110px" },
             { id: "quantity", title: "Quantity", width: "70px" },
-            { id: "state", title: "State", width: "200px" },
+            { id: "state", title: "State", width: "140px" },
             { id: "desc", title: "Description", /* width: "400px" */ },
         ],
         load: function (e) {
@@ -77,16 +78,15 @@ document.addEventListener("DOMContentLoaded", (event) => {
         },
         enhanceTitle: function (e) {
             e.titleSpan.title = e.node.data.desc;
-        },
+        }
     });
-});
+});  
 
 document.onkeydown = function (e) {
     if (parttree === null || parttree.activeNode === null)
         return;
 
     if (parttree.activeNode.key) {
-        console.log(e.key);
         if (e.key === 'c' || e.key === 'C') {
             window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=C&abbrev=";
         }
@@ -132,7 +132,7 @@ document.onkeydown = function (e) {
             window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=M&abbrev=";
         }
         else if (e.key === 'd' || e.key === 'D') {
-            window.location.href = "/robots/drawings?partno=" + e.node.key ;
+            window.location.href = "/drawings/drawings?partno=" + parttree.activeNode.key ;
         }
         else if (e.key === 'Delete') {
             if (parttree.activeNode.key === '001-COMP-00001' || parttree.activeNode.key === '001-PRAC-00001') {
