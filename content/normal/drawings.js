@@ -275,7 +275,13 @@ function loadDrawings() {
             for (const col of Object.values(e.renderColInfosById)) {
                 col.elem.textContent = node.data[col.id];
             }
-        }
+        },
+        dblclick: function (e) {
+            let set = parttree.activeNode.data.set ;
+            let version = parttree.activeNode.data.version ;
+            let url = "/drawings/show?partno=" + partnovalue + "&set=" + set + "&version=" + version ;
+            window.open(url, '_blank').focus();
+        },
     });
 }
 
