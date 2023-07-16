@@ -118,6 +118,17 @@ function setStudentOrMentor(data, lastone, name, value, choices) {
     return div;
 }
 
+function stateChanged(e) {
+    let st = e.target.value ;
+    $('#nextstatelabel').html("'" + st + "' Date");
+
+    if (!checkStateChange()) {
+        // The state changed - prompt the user to change the new date
+        alert('You have changed to state, you also need to change the date for this next state') ;
+        $('#nextstatelabel').focus();
+    }
+}
+
 function setState(data, lastone) {
     var parent = lastone.parentElement;
 
@@ -136,6 +147,7 @@ function setState(data, lastone) {
     var select = document.createElement('select');
     select.id = 'state';
     select.name = 'state';
+    select.onclick = stateChanged;
 
     if (data.mentor.length === 0 && data.student.length === 0) {
         select.title = 'Assign a student and mentor to move from unassigned state';
@@ -185,7 +197,6 @@ function checkStateChange() {
 
     if (newstate !== oldstate && newstate !== 'Done') {
         if (newdate === olddate || newdate === '') {
-            alert('You have changed the state of the part. You need to update the Next Date which is the date when the part will leave this new state');
             return false;
         }
     }
@@ -198,6 +209,7 @@ function doValidate(e) {
         return;
 
     if (!checkStateChange()) {
+        alert('You have changed the state of the part. You need to update the Next Date which is the date when the part will leave this new state');
         e.preventDefault();
         return ;        
     }
@@ -281,6 +293,7 @@ function getOnePart() {
                     }
 
                     $('#nextstatelabel').html("'" + oldstate + "' Date");
+                    $('#notes').val(data.notes);
 
                     let listparent = document.getElementById('descidparent');
                     let datalist = document.createElement('datalist');

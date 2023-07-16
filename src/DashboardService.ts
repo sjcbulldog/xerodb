@@ -77,6 +77,7 @@ export class DashboardService extends DatabaseService {
             robots.push(nrobot);
         }
         ret.robots = robots ;
+        ret.username = u.username_ ;
 
         try {
             let robot: number | null = await this.getDashboardRobot(u);
@@ -120,6 +121,9 @@ export class DashboardService extends DatabaseService {
         let current: Date = new Date() ;
 
         for(let one of parts) {
+            if (one.state_ === RobotService.stateDone)
+                continue ;
+                
             if (one.doneDaysLate() > 0) {
                 let obj: LooseObject = this.robots_.partToLoose(u, one) ;
                 ret.push(obj) ;
@@ -177,11 +181,19 @@ export class DashboardService extends DatabaseService {
             return;            
         }
 
+        let user: boolean = false ;
+        if (req.query.user && req.query.user === 'true') {
+            user = true ;
+        }
+
         let ret: LooseObject[] = [] ;
         let parts: RobotPart[] = await this.robots_.getPartsForRobot(rid);
         let bystate: Map<string, LooseObject[]> = new Map<string, LooseObject[]>();
 
         for(let one of parts) {
+            if (user === true && one.student_ != u.username_ && one.mentor_ != u.username_)
+                continue ;
+
             if (bystate.has(one.state_)) {
                 bystate.get(one.state_)!.push(this.robots_.partToLoose(u, one)) ;
             }
@@ -332,7 +344,7 @@ export class DashboardService extends DatabaseService {
         res.json(ret) ;
     }          
 
-    private descend(part: RobotPart, quantity: number, total: Map<string, number>, parts: RobotPart[]) {
+    private descend(part: RobotPart, quantity: number, total: LooseObject[], parts: RobotPart[]) {
         if (part.state_ === RobotService.stateReadyToOrder) {
             if (total.has(part.description_)) {
                 let numtot: number = part.quantity_ * quantity + total.get(part.description_)!;
@@ -368,7 +380,7 @@ export class DashboardService extends DatabaseService {
             type = req.query.type ;
 
         let parts: RobotPart[] = await this.robots_.getPartsForRobot(rid);
-        let total: Map<string, number> = new Map<string, number>() ;
+        let total: LooseObject = [] ;
         let p: RobotPart | null = RobotService.findPartById(new PartNumber(rid, 'COMP', 1), parts) ;
         if (p !== null) {
             this.descend(p, 1, total, parts);
@@ -377,6 +389,9 @@ export class DashboardService extends DatabaseService {
         p = RobotService.findPartById(new PartNumber(rid, 'PRAC', 1), parts) ;
         if (p !== null) {
             this.descend(p, 1, total, parts);
+        }
+
+        for (let [key, value] of total) {
         }
     }
 

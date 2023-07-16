@@ -17,6 +17,7 @@ export class RobotPart {
     links_: string[] ;
     donedate_: string;
     nextdate_: string;
+    notes_ : string | undefined ;
     drawings_: PartDrawing[] ;
     attribs_ : Map<string, string> ;
 
@@ -38,6 +39,7 @@ export class RobotPart {
         this.links_ = links ;
         this.donedate_ = donedate ;
         this.nextdate_ = nextdate;
+        this.notes_ = undefined ;
         this.drawings_ = [] ;
         if (attribs)
             this.attribs_ = attribs ;
@@ -84,7 +86,7 @@ export class RobotPart {
                                     this.type_, this.username_, this.created_, this.modified_, 
                                     this.mentor_, this.student_, this.files_, this.links_, this.donedate_, 
                                     this.nextdate_, this.cloneAttribs());
-
+        ret.notes_ = this.notes_ ;
         return ret;
     }
 

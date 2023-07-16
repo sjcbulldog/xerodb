@@ -15,6 +15,17 @@ const reports = [
         ]
     },
     {
+        name: "User Parts By State",
+        url: "/dashboard/state?user=true&",
+        columns: [
+            { id: "*", title: "Part", width: "300px" },
+            { id: "student", title: "Student", width: "120px" },
+            { id: "mentor", title: "Mentor", width: "120px" },
+            { id: "nextdate", title: "Next Date", width: "120px" },
+            { id: "desc", title: "Description" }
+        ]
+    },
+    {
         name: "Parts By Days Late (next state)",
         url: "/dashboard/latereport?type=next&",
         columns: [
@@ -37,7 +48,7 @@ const reports = [
         ]
     },
     {
-        name: "Parts To Order",
+        name: "Parts Ready To Order",
         url: "/dashboard/order?",
         columns: [
             { id: "*", title: "Part", width: "300px" },
@@ -45,6 +56,27 @@ const reports = [
             { id: "mentor", title: "Mentor", width: "120px" },
             { id: "donedate", title: "Done Date", width: "120px" },
             { id: "desc", title: "Description" }
+        ]
+    },
+    {
+        name: "Parts Activity",
+        url: "/audit/partreport?",
+        columns: [
+            { id: "*", title: "Part", width: "220px" },
+            { id: "username", title: "User Name" , width: "120px" },
+            { id: "ipaddr", title: "IP Address" , width: "120px" },
+            { id: "timestamp", title: "When" , width: "200px" },
+            { id: "action", title: "Action"},
+        ]
+    },
+    {
+        name: "Users Activity",
+        url:  "/audit/userreport?",
+        columns: [
+            { id: "*", title: "User Name", width: "160px" },
+            { id: "ipaddr", title: "IP Address" , width: "120px" },
+            { id: "timestamp", title: "When" , width: "200px" },
+            { id: "action", title: "Action" },
         ]
     }
 ]
@@ -107,6 +139,11 @@ function robotSelected(sel) {
 }
 
 function reportSelected(sel) {
+    if ($('#selrobot').val() === noRobotSelected) {
+        alert('No robot is selected - select a robot to get a report') ;
+        return ;
+    }
+
     if (sel.selectedOptions.length === 1) {
         let opt = sel.selectedOptions[0];
         reportdesc = opt.reportDesc ;

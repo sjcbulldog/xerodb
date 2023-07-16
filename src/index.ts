@@ -66,7 +66,7 @@ app.get(nologinName, (req, res, next) => {
 app.get(adminName, (req, res) => {
 
   if (!isAdmin(usersrv, req, res)) {
-    res.send(createMessageHtml('Permission Denied', 'You do not have permission for this command'));
+    res.send(createMessageHtml('Permission Denied', 'You do not have permission for this command', null));
   }
   else {
     let urlpath: string = req.url.substring(adminName.length - 1);

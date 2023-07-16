@@ -1,12 +1,21 @@
 .flex-container {
     display: flex;
+    height: 30vh;
+}
+
+#list1 {
+    height: 29vh;
+}
+
+#list2 {
+    height: 29vh;
 }
 
 .flex-child {
     flex: 1;
     border: 2px solid rgb(0, 0, 0);
     width: 512px;
-    height: 256px;
+    height: 100%;
 }  
 
 .flex-child:first-child {
@@ -16,4 +25,8 @@
 
 h2 {
     margin: 0px;
+}
+
+#username {
+    float: right ;
 }

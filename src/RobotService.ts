@@ -262,6 +262,7 @@ export class RobotService extends DatabaseService {
                 links text not null,
                 donedate text not null,
                 nextdate text not null,
+                notes text,
                 attribs text);
         ` ;
 
@@ -393,7 +394,11 @@ export class RobotService extends DatabaseService {
 
         if (current.description_ !== old.description_) {
             ret.push('description: "' + old.description_ + '"->"' + current.description_ + '"');
-        }     
+        }
+
+        if (current.notes_ !== old.notes_) {
+            ret.push('notes: "' + old.notes_ + '"->"' + current.notes_ + '"');
+        }
 
         ret.push.apply(this.diffAttribs(current.attribs_, old.attribs_));
 
@@ -651,9 +656,13 @@ export class RobotService extends DatabaseService {
         sql += " state='" + part.state_ + "'," ;
         sql += " donedate='" + part.donedate_ + "'," ;
         sql += " nextdate='" + part.nextdate_ + "'," ;
+        if (part.notes_) {
+            sql += " notes='" + this.escapeString(part.notes_) + "'," ;
+        }
         sql += " files='" + this.escapeString(packFiles(part.files_)) + "'," ;
         sql += " links='" + this.escapeString(packLinks(part.links_)) + "'," ;
         sql += " attribs='" + this.escapeString(this.attribMapToString(part.attribs_)) + "'";
+
         sql += " WHERE partno='" + part.part_.toString() + "'" ;
 
         let ret: Promise<void> = new Promise<void>((resolve, reject) => {
@@ -705,6 +714,7 @@ export class RobotService extends DatabaseService {
         sql += "'',";
         sql += "'',";
         sql += "'',";
+        sql += "'',";                                                                   // Notes
         sql += "'" + this.escapeString(this.attribMapToString(attribs)) + "')";
 
         let ret: Promise<void> = new Promise<void>(async (resolve, reject) => {
@@ -836,6 +846,7 @@ export class RobotService extends DatabaseService {
         const linksKey = 'links' as ObjectKey ;
         const donedateKey = 'donedate' as ObjectKey ;
         const nextdateKey = 'nextdate' as ObjectKey ;
+        const notesKey = 'notes' as ObjectKey ;
         const attribsKey = 'attribs' as ObjectKey;
 
         let parent = (obj[parentKey] as unknown) as string;
@@ -853,6 +864,7 @@ export class RobotService extends DatabaseService {
         let links = (obj[linksKey] as unknown) as string;
         let donedate = (obj[donedateKey] as unknown) as string;
         let nextdate = (obj[nextdateKey] as unknown) as string;
+        let notes = (obj[notesKey] as unknown) as string;
         let attribs = (obj[attribsKey] as unknown) as string;
 
         let attrlist: Map<string, string>;
@@ -885,6 +897,7 @@ export class RobotService extends DatabaseService {
         let linklist : string [] = unpackLinks(links) ;
         let retval: RobotPart = new RobotPart(parentNum!, partNum!, state, quantity, desc, type, username, created, 
                                     modified, mentor, student, filelist, linklist, donedate, nextdate, attrlist);
+        retval.notes_ = notes ;
         this.applyAttributes(retval);
 
         return retval;
@@ -893,7 +906,7 @@ export class RobotService extends DatabaseService {
     private async getOnePart(partno: PartNumber): Promise<RobotPart | null> {
         let ret: Promise<RobotPart | null > = new Promise<RobotPart | null>((resolve, reject) => {
             let retval: RobotPart | null;
-            let sql = "select parent, partno, state, student, mentor, quantity, desc, type, username, created, modified, files, links, donedate, nextdate, attribs from parts where partno='" + partno + "'" ;
+            let sql = "select parent, partno, state, student, mentor, quantity, desc, type, username, created, modified, files, links, donedate, nextdate, notes, attribs from parts where partno='" + partno + "'" ;
             this.db().all(sql, async (err, rows) => {
                 if (rows.length === 0) {
                     reject(new Error('no such record found'));
@@ -917,7 +930,7 @@ export class RobotService extends DatabaseService {
             let retval: RobotPart[] = [];
             let rstr = PartNumber.robotNumberToString(robot) + '-' ;
             let where = " where substring(partno,1," + rstr.length + ")='" + rstr + "'" ;
-            let sql = "select parent, partno, state, student, mentor, quantity, desc, type, username, created, modified, files, links, donedate, nextdate, attribs from parts" + where ;
+            let sql = "select parent, partno, state, student, mentor, quantity, desc, type, username, created, modified, files, links, donedate, nextdate, notes, attribs from parts" + where ;
             this.db().all(sql, async (err, rows) => {
                 if (err) {
                     resolve([]);
@@ -1058,6 +1071,9 @@ export class RobotService extends DatabaseService {
             ret['nextstates'] = this.nextStates(u, part);
         }
         ret['attribs'] = this.attribMapToArray(part.attribs_, this.getAttributes(part));
+
+        if (part.notes_)
+            ret['notes'] = part.notes_;
 
         if (part.type_ === RobotService.partTypeAssembly) {
             ret['folder'] = true;
@@ -1551,6 +1567,9 @@ export class RobotService extends DatabaseService {
         part.quantity_ = parseInt(req.body.quantity, 10);
         part.donedate_ = req.body.donedate ;
         part.nextdate_ = req.body.nextdate;
+
+        if (req.body.notes)
+            part.notes_ = req.body.notes ;
 
         for (let attr of this.getAttributes(part)) {
             let val = req.body[attr.name_];

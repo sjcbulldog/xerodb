@@ -116,7 +116,6 @@ function selectRobot(sel) {
 function createLateTree(which) {
     $('#title' + which).html('Parts Late To Schedule');
     latetree = new mar10.Wunderbaum({
-        id: "list" + which,
         element: document.getElementById("list" + which),
         source: {
             url: "/dashboard/empty"
@@ -150,7 +149,6 @@ function createLateTree(which) {
 function createStateTree(which) {
     $('#title' + which).html('Parts By State');
     statetree = new mar10.Wunderbaum({
-        id: "list" + which,
         element: document.getElementById("list" + which),
         source: {
             url: "/dashboard/empty"
@@ -215,6 +213,7 @@ function loadDashboard() {
             tellUser(false, 'There are no robots defined, create a robot to see the dashboard');
         }
         else {
+            $('#username').html("<b>Username:</b> " + data.username);
             robots = data.robots;
             let sel = document.getElementById('selrobot');
 
