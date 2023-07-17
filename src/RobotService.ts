@@ -51,7 +51,7 @@ export class RobotService extends DatabaseService {
     private static readonly methodAssignedStudent = "assigned-student" ;
     private static readonly methodAssignedMentor = "assigned-mentor" ;
 
-    private static readonly unitCostAttribute = 'Unit Cost' ;
+    public static readonly unitCostAttribute = 'Unit Cost' ;
 
     private static readonly doubleClickMessage = 'Double Click To Edit' ;
 

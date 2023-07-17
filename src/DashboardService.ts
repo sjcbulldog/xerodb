@@ -7,6 +7,7 @@ import { UserService } from "./UserService";
 import { User } from "./User";
 import { RobotPart } from "./RobotPart";
 import { PartNumber } from "./PartNumber";
+import { OneInstance, PartOrder } from "./PartOrder";
 
 interface LooseObject {
     [key: string]: any
@@ -344,20 +345,31 @@ export class DashboardService extends DatabaseService {
         res.json(ret) ;
     }          
 
-    private descend(part: RobotPart, quantity: number, total: LooseObject[], parts: RobotPart[]) {
-        if (part.state_ === RobotService.stateReadyToOrder) {
-            if (total.has(part.description_)) {
-                let numtot: number = part.quantity_ * quantity + total.get(part.description_)!;
-                total.set(part.description_, numtot);
-            }
-            else {
-                total.set(part.description_, quantity * part.quantity_);
+    private descend(part: RobotPart, quantity: number, path: string[], total: Map<string, PartOrder>, parts: RobotPart[]) {
+        if (part.type_ === RobotService.partTypeCOTS && part.state_ === RobotService.stateReadyToOrder) {
+            if (part.attribs_.get(RobotService.unitCostAttribute)) {
+                let partpath: string[] = [...path, part.part_.toString()] ;
+                let cost: number = 0.0 ;
+                let coststr: string | undefined = part.attribs_.get(RobotService.unitCostAttribute) ;
+                cost = parseFloat(coststr!);
+                let oneinst = new OneInstance(partpath, quantity, cost);
+
+                if (total.has(part.description_)) {
+                    let opart: PartOrder | undefined = total.get(part.description_);
+                    opart!.addInstance(oneinst);
+                }
+                else {
+                    let opart: PartOrder = new PartOrder(part.description_) ;
+                    opart.addInstance(oneinst) ;
+                    total.set(part.description_, opart);
+                }
             }
         }
         else if (part.type_ === RobotService.partTypeAssembly) {
             for(let one of parts) {
                 if (one.isChildOf(part.part_)) {
-                    this.descend(one, quantity * one.quantity_, total, parts) ;
+                    let partpath : string[] = [...path, one.part_.toString()] ;
+                    this.descend(one, quantity * one.quantity_, partpath, total, parts);
                 }
             }
         }
@@ -380,19 +392,46 @@ export class DashboardService extends DatabaseService {
             type = req.query.type ;
 
         let parts: RobotPart[] = await this.robots_.getPartsForRobot(rid);
-        let total: LooseObject = [] ;
+        let total: Map<string, PartOrder> = new Map<string, PartOrder>();
         let p: RobotPart | null = RobotService.findPartById(new PartNumber(rid, 'COMP', 1), parts) ;
         if (p !== null) {
-            this.descend(p, 1, total, parts);
+            let path: string[] = [ p.part_.toString() ] ;
+            this.descend(p, 1, path, total, parts);
         }
 
         p = RobotService.findPartById(new PartNumber(rid, 'PRAC', 1), parts) ;
         if (p !== null) {
-            this.descend(p, 1, total, parts);
+            let path: string[] = [ p.part_.toString() ] ;
+            this.descend(p, 1, path, total, parts);
         }
 
+        let ret: LooseObject[] = [] ;
+
         for (let [key, value] of total) {
+            let obj: LooseObject = { 
+                title: key,
+                quantity: value.totalQuantity(),
+                cost: value.cost() * value.totalQuantity(),
+            };
+
+            let childs: LooseObject[] = [] ;
+            for(let inst of value.instances_) {
+                let childobj : LooseObject = {
+                    title: inst.path_.toString().replace(',', '/'),
+                    quantity: '',
+                    cost: '',
+                } ;
+                childs.push(childobj);
+            }
+
+            if (childs.length > 0) {
+                obj.children = childs ;
+            }
+
+            ret.push(obj);
         }
+
+        res.json(ret);
     }
 
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
