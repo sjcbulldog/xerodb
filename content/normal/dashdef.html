@@ -13,9 +13,14 @@
         <title>XeroDB Dashboard</title>
     </head>
     <body>
-        <b>Robot:</b>
-        <select id="selrobot" onclick="selectRobot(this)"></select>
-        <div id="username"></div>
+        <div id="horiz">
+            <div id="selrobotdiv">
+                <b>Robot:</b>
+                <select id="selrobot" onclick="selectRobot(this)"></select>
+            </div>
+            <div id="robotlink"></div>
+            <div id="username"></div>
+        </div>
         <div class="flex-container">
             <div class="flex-child"><canvas id="canvas1"></canvas></div>
             <div class="flex-child"><canvas id="canvas2"></canvas></div>    

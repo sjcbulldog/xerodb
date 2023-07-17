@@ -719,6 +719,10 @@ export class RobotService extends DatabaseService {
 
         let ret: Promise<void> = new Promise<void>(async (resolve, reject) => {
             try {
+                let parentpart: RobotPart | null = null ;
+                if (parent) {
+                    parentpart = await this.getOnePart(parent!);
+                }
                 await this.db().exec(sql, (err) => {
                     if (err) {
                         xeroDBLoggerLog('ERROR', 'RobotService: failed to add part "' + partno.toString() + '" to the database - ' + err);
@@ -726,6 +730,11 @@ export class RobotService extends DatabaseService {
                         reject(err);
                     }
                     else {
+                        if (parentpart && parentpart.state_ == RobotService.stateReadyForAssembly) {
+                            let prevparent: RobotPart = parentpart.clone();
+                            parentpart.state_ = RobotService.stateWaitingForParts ;
+                            this.updatePart(u, parentpart, prevparent);
+                        }
                         xeroDBLoggerLog('INFO', 'UserService: added part "' + partno.toString() + '" to the database');
                         this.updateRobotModified(partno.robot_);
                         this.tellUpdate(u.username_, u.ipaddr_, partno, desc, 'created new robot part, type="' + type + '"');

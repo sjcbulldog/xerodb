@@ -27,6 +27,16 @@ h2 {
     margin: 0px;
 }
 
+#horiz {
+    display: flex;
+    justify-content: space-between;
+}
+
 #username {
-    float: right ;
+}
+
+#robotlink {
+}
+
+#selrobotdiv {
 }

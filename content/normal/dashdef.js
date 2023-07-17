@@ -109,6 +109,7 @@ function selectRobot(sel) {
     if (sel.selectedOptions.length === 1) {
         let opt = sel.selectedOptions[0];
         $.getJSON('/dashboard/setrobot?robotid=' + opt.robotID);
+        createRobotLink(opt.robotID, opt.robotName);
         populateDashboard(opt.robotID);
     }
 }
@@ -190,7 +191,14 @@ function getRobotName(robots, id) {
     return '';
 }
 
-function createByStateChart() {
+function createRobotLink(robotid, robotname) {
+    let link = document.getElementById('robotlink');
+    
+    while (link.firstChild) {
+        link.removeChild(link.firstChild);
+    }
+
+    link.innerHTML = '<a href="/robots/viewrobot?robotid=' + robotid + '">Goto Selected Robot</a>' ;
 }
 
 function loadDashboard() {
@@ -237,6 +245,7 @@ function loadDashboard() {
             var usenotrobot = true;
             if (data.robot !== undefined) {
                 let name = getRobotName(data.robots, data.robot);
+                createRobotLink(data.robot, name);
                 if (name.length > 0) {
                     sel.value = name;
                     populateDashboard(data.robot);
