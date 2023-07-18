@@ -6,6 +6,11 @@
     overflow-y: scroll;
 }
 
+#gantt {
+    overflow-y: scroll;
+    height: 400px;
+}
+
 .styled-table {
     border-collapse: collapse;
     margin: 25px 0;

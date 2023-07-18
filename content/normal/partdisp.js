@@ -121,7 +121,7 @@ function createCanvas(part) {
 
     gcanvas = document.createElement('canvas');
     ganttdiv.appendChild(gcanvas);
-    gcanvas.id = 'gantt' ;
+    gcanvas.id = 'ganttcanvas' ;
     gcanvas.width = ganttdiv.clientWidth;
     gcanvas.height = (lines + 1) * lineSpacing ;
 }
@@ -245,6 +245,7 @@ function doBasic(part) {
 
     drawingsdiv.appendChild(table);
     table.appendChild(createPair('Description', part.desc));
+    table.appendChild(createPair('Type', part.ntype));
     table.appendChild(createPair('State', part.state));
     table.appendChild(createPair('Done Date', part.donedate));
     table.appendChild(createPair('Next State', part.nextdate));
