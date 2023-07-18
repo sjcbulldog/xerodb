@@ -9,24 +9,11 @@ My Open Questions
 TODO
 ----
 
-Parts view page - cannot edit but see all details
-
 User's guide
-
 Inventory
-
-Ready To Order Report - showing quantities
+Ready To Order Report - update the path to each part
 
 Purchased Assemblies (optionally add vendor)
-
-Check: an assembly done date cannot be before the done dates of its children
-
-Generalize the concept of top level robots so there can be more than two
-    - delete in viewrobot.js
-    - order in DashboardService.ts
-
-views
-    - Assembly dependency view
 
 reports
     - ready to order - special
