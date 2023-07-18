@@ -134,6 +134,9 @@ document.onkeydown = function (e) {
         else if (e.key === 'd' || e.key === 'D') {
             window.location.href = "/drawings/drawings?partno=" + parttree.activeNode.key ;
         }
+        else if (e.key === 'p' || e.key === 'P') {
+            window.location.href = "/robots/partdisp?partno=" + parttree.activeNode.key ;
+        }
         else if (e.key === 'Delete') {
             if (parttree.activeNode.key === '001-COMP-00001' || parttree.activeNode.key === '001-PRAC-00001') {
                 alert('You cannot delete the top most comp bot or practice bot.');

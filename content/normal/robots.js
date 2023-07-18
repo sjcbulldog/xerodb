@@ -50,7 +50,7 @@ function createNotifiyCell(notify, partno) {
     return td ;
 }
 
-function showAllUsers() {
+function showAllRobots() {
     $.getJSON('/robots/listall', (data) => {
         let table = document.createElement('table') ;
         let tr = document.createElement('tr');
@@ -79,4 +79,4 @@ function showAllUsers() {
     }) ;
 }
 
-$(document).ready(showAllUsers);
+$(document).ready(showAllRobots);

@@ -1930,6 +1930,41 @@ export class RobotService extends DatabaseService {
         res.redirect(url);
     }
 
+    private async partdisp(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+
+        if (req.query.partno === undefined) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/rename - missing query parameters'));
+            return;
+        }
+
+        let partno: PartNumber | null = PartNumber.fromString(req.query.partno);
+        if (partno === null) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/rename - invalid partno'));
+            return;
+        }
+
+        let vars: Map<string, string> = new Map<string, string>();
+        vars.set('$$$PARTNO$$$', req.query.partno);
+        res.send(processPage(vars, '/normal/partdisp.html'));
+    }    
+
+    private async partdata(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        if (req.query.partno === undefined) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/rename - missing query parameters'));
+            return;
+        }
+
+        let partno: PartNumber | null = PartNumber.fromString(req.query.partno);
+        if (partno === null) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/rename - invalid partno'));
+            return;
+        }
+
+        let parts: RobotPart[] = await this.getPartsForRobot(partno.robot_);
+        let objs: LooseObject[] = this.partsToTree([partno], parts) ;
+        res.json(objs);
+    }  
+
     public get(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         xeroDBLoggerLog('DEBUG', "RobotService: rest api '" + req.path + "'");
 
@@ -2008,6 +2043,14 @@ export class RobotService extends DatabaseService {
         }
         else if (req.path === '/robots/rename') {
             this.rename(u, req, res);
+            handled = true ;
+        }
+        else if (req.path === '/robots/partdisp') {
+            this.partdisp(u, req, res);
+            handled = true ;
+        }
+        else if (req.path === '/robots/partdata') {
+            this.partdata(u, req, res);
             handled = true ;
         }
 
