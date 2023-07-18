@@ -1,9 +1,26 @@
 const leftMargin = 10 ;
+const rightMargin = 60 ;
 const topMargin = 10 ;
 const lineSpacing = 30 ;
+const lineWidth = 10 ;
 var deepx = 0 ;
 var gcanvas = undefined ;
 var maxdays = 0 ;
+var infinityStr = '\u221E'
+
+function maxParentDays(part) {
+    let ret = 0 ;
+    part = part.parentPart ;
+    while (part) {
+        if (part.days > ret) {
+            ret = part.days ;
+        }
+
+        part = part.parentPart ;
+    }
+
+    return ret ;
+}
 
 function drawOneLabel(ctx, part, x, y) {
     part.drawX = x ;
@@ -32,16 +49,24 @@ function drawOneLine(ctx, days, pixels, part) {
     
     if (isFinite(part.days)) {
         width = part.days / days * pixels ;
-        ctx.strokeStyle = 'green' ;
+
+        if (part.parentPart && part.days > maxParentDays(part)) {
+            ctx.strokeStyle = 'yellow' ;
+        }
+        else {
+            ctx.strokeStyle = 'green' ;
+        }
+
     }
     else {
         width = pixels ;
         ctx.strokeStyle = 'red' ;
     }
 
+    let y = part.drawY + lineSpacing / 2 - lineWidth / 2;
     ctx.beginPath();
-    ctx.moveTo(deepx, part.drawY + lineSpacing / 2);
-    ctx.lineTo(deepx + width, part.drawY + lineSpacing / 2);
+    ctx.moveTo(deepx, y);
+    ctx.lineTo(deepx + width, y);
     ctx.stroke();
 
     if (part.children) {
@@ -49,6 +74,13 @@ function drawOneLine(ctx, days, pixels, part) {
             drawOneLine(ctx, days, pixels, child);
         }
     }
+
+    let daystr ;
+    if (isFinite(part.days))
+        daystr = part.days + ' days' ;
+    else
+        daystr = infinityStr + ' days' ;
+    ctx.fillText(daystr, deepx + width + 10, part.drawY);
 }
 
 function drawGantt(part) {
@@ -56,12 +88,14 @@ function drawGantt(part) {
     var ctx = gcanvas.getContext('2d');
     ctx.font = "24px serif";
     ctx.textBaseline = "top" ;
-    ctx.lineWidth = 10 ;
+
     drawOneLabel(ctx, part, leftMargin, topMargin) ;
-    deepx += 240 ;
+    deepx += 170 ;
 
-    var xpixels = gcanvas.width - deepx - leftMargin ;
-
+    var xpixels = gcanvas.width - deepx - leftMargin - rightMargin ;
+    ctx.lineWidth = lineWidth ;
+    ctx.font = "16px serif";
+    ctx.textBaseline = "top" ;
     drawOneLine(ctx, maxdays, xpixels, part);
 }
 
@@ -117,6 +151,7 @@ function computeDays(part, maxdays) {
 
     if (part.children) {
         for(let one of part.children) {
+            one.parentPart = part ;
             maxdays = computeDays(one, maxdays);
         }
     }
@@ -124,11 +159,101 @@ function computeDays(part, maxdays) {
     return maxdays ;
 }
 
-
 function doGantt(part) {
     maxdays = computeDays(part, 0);
     createCanvas(part) ;
     drawGantt(part);
+}
+
+function createDrawingTableHeader() {
+    let tr = document.createElement('tr');
+    let th ;
+
+    th = document.createElement('th');
+    th.innerHTML = 'Title' ;
+    tr.appendChild(th);
+
+    th = document.createElement('th');
+    th.innerHTML = 'Version' ;
+    tr.appendChild(th);
+
+    return tr ;
+}
+
+function createDrawingRow(drawing) {
+    let tr = document.createElement('tr');
+    let td ;
+
+    td = document.createElement('td');
+
+    let htmlstr = '<a target="_blank" href="/drawings/show?partno=' + partnovalue + '&set=' + drawing.set + '&version=' + drawing.version + '">' ;
+    if (drawing.dtype.startsWith('Drawing File'))
+        htmlstr += '<img src="/nologin/images/file.png" width=32 height=32>  ' ;
+    else
+        htmlstr += '<img src="/nologin/images/link.png" width=32 height=32>  ' ;
+
+    htmlstr += drawing.title;
+    htmlstr += '</a>' ;
+
+    td.innerHTML = htmlstr ;
+    tr.appendChild(td);
+
+    td = document.createElement('td');
+    td.innerHTML = drawing.version;
+    tr.appendChild(td);
+
+    return tr ;
+}
+
+function doDrawings(drawings) {
+    let drawingsdiv = document.getElementById('drawings');
+    while (drawingsdiv.firstChild) {
+        drawingsdiv.removeChild(drawingsdiv.firstChild);
+    }
+
+    let table = document.createElement('table');
+    table.className = 'styled-table';
+    drawingsdiv.appendChild(table);
+    table.appendChild(createDrawingTableHeader());
+
+    for(let one of drawings) {
+        table.appendChild(createDrawingRow(one));
+    }
+}
+
+function createPair(name, value) {
+    let tr = document.createElement('tr');
+    let td = document.createElement('td');
+    td.innerHTML = name ;
+    tr.appendChild(td);
+
+    td = document.createElement('td');
+    td.innerHTML = value ;
+    tr.appendChild(td);
+
+    return tr ;
+}
+
+function doBasic(part) {
+    let drawingsdiv = document.getElementById('basic');
+    while (drawingsdiv.firstChild) {
+        drawingsdiv.removeChild(drawingsdiv.firstChild);
+    }
+
+    let table = document.createElement('table');
+    table.className = 'styled-table';
+
+    drawingsdiv.appendChild(table);
+    table.appendChild(createPair('Description', part.desc));
+    table.appendChild(createPair('State', part.state));
+    table.appendChild(createPair('Done Date', part.donedate));
+    table.appendChild(createPair('Next State', part.nextdate));
+    table.appendChild(createPair('Notes', part.notes));
+    table.appendChild(createPair('Quantity', part.quantity));
+
+    for (var attr of part.attribs) {
+        table.appendChild(createPair(attr.key, attr.value));
+    }
 }
 
 function initPage() {
@@ -144,7 +269,13 @@ function initPage() {
         if (data[0].ntype.startsWith("A")) {
             doGantt(data[0]);
         }
+
+        doBasic(data[0]);
     });
+
+    $.getJSON('/drawings/drawingslist?titles=true&partno=' + partnovalue, (data) => {
+        doDrawings(data);
+    })
 }
 
 $(document).ready(initPage);

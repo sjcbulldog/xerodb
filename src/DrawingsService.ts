@@ -207,7 +207,7 @@ export class DrawingsService extends DatabaseService {
         return ret ;
     }
 
-    private drawingsToLoose(drawings: PartDrawing[]) : LooseObject[] {
+    private drawingsToLoose(drawings: PartDrawing[], titles: boolean) : LooseObject[] {
         let ret: LooseObject[] = [] ;
 
         if (drawings.length > 0) {
@@ -221,7 +221,11 @@ export class DrawingsService extends DatabaseService {
                 }
                 else {
                     // This is a different version, 
-                    lobj.title = '' ;
+                    if (titles) {
+                        lobj.title = one.desc_ ;
+                    } else {
+                        lobj.title = '' ;
+                    }
                 }
 
                 if (one.remote_file_) {
@@ -387,6 +391,12 @@ export class DrawingsService extends DatabaseService {
     }
 
     private async drawingslist(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        let titles: boolean = false ;
+
+        if (req.query.titles && req.query.titles === 'true') {
+            titles = true ;
+        }
+
         if (req.query.partno === undefined) {
             res.json([
                 { title: 'invalid api REST request /drawings/drawingslist - missing query parameters' }
@@ -404,7 +414,7 @@ export class DrawingsService extends DatabaseService {
 
         let drawings = await this.getDrawings(partno) ;
 
-        let json : LooseObject[] = this.drawingsToLoose(drawings) ;
+        let json : LooseObject[] = this.drawingsToLoose(drawings, titles) ;
 
         res.json(json);
     }

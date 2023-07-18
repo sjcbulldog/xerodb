@@ -1083,6 +1083,8 @@ export class RobotService extends DatabaseService {
 
         if (part.notes_)
             ret['notes'] = part.notes_;
+        else
+            ret['notes'] = '' ;
 
         if (part.type_ === RobotService.partTypeAssembly) {
             ret['folder'] = true;
