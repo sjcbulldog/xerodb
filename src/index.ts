@@ -51,7 +51,7 @@ xeroDBLoggerInit(logStream);
 app.disable('etag');
 app.use(morgan('combined', { stream: logStream }));
 app.use(express.json());
-app.use(bodyParser.urlencoded());
+app.use(bodyParser.urlencoded( { extended: true}));
 app.use(cookieParser());
 app.use(FileUpload({ createParentPath: true}));
 
