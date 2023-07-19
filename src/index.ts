@@ -48,6 +48,7 @@ var logStream = FileStreamRotator.getStream({
 
 xeroDBLoggerInit(logStream);
 
+app.disable('etag');
 app.use(morgan('combined', { stream: logStream }));
 app.use(express.json());
 app.use(bodyParser.urlencoded());
