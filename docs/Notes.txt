@@ -11,12 +11,10 @@ TODO
 
 User's guide
 Inventory
-Ready To Order Report - update the path to each part
-
 Purchased Assemblies (optionally add vendor)
 
 reports
-    - ready to order - special
+    - ready to order - special, underway but needs path to each part better
     - ready for CAD
     - ready for Assembly
     - ready for Mentor Check

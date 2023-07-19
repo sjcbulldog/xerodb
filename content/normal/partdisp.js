@@ -3,10 +3,13 @@ const rightMargin = 60 ;
 const topMargin = 10 ;
 const lineSpacing = 30 ;
 const lineWidth = 10 ;
+const labelWidth = 200 ;
+const levelIndent = 24 ;
 var deepx = 0 ;
 var gcanvas = undefined ;
 var maxdays = 0 ;
 var infinityStr = '\u221E'
+var parts;
 
 function maxParentDays(part) {
     let ret = 0 ;
@@ -25,10 +28,10 @@ function maxParentDays(part) {
 function drawOneLabel(ctx, part, x, y) {
     part.drawX = x ;
     part.drawY = y ;
-    ctx.fillText(part.key, x, y, 240) ;
+    ctx.fillText(part.key, x, y, labelWidth) ;
 
     if (part.children) {
-        x += 24 ;
+        x += levelIndent ;
 
         if (x > deepx) {
             deepx = x ;
@@ -90,7 +93,7 @@ function drawGantt(part) {
     ctx.textBaseline = "top" ;
 
     drawOneLabel(ctx, part, leftMargin, topMargin) ;
-    deepx += 170 ;
+    deepx += labelWidth ;
 
     var xpixels = gcanvas.width - deepx - leftMargin - rightMargin ;
     ctx.lineWidth = lineWidth ;
@@ -111,6 +114,81 @@ function countTotal(part) {
     return ret ;
 }
 
+var tohandle = undefined ;
+var tooltip = false ;
+var pt = undefined ;
+
+function findPart() {
+    let p = undefined ;
+
+    for(let part of parts) {
+        if (pt.y > part.drawY && pt.y < part.drawY + lineSpacing) {
+            p = part ;
+            break ;
+        }
+    }
+
+    return p ;
+}
+
+function createToolTip() {
+    let ret = false ;
+    let p = findPart() ;
+    if (p) {
+        let ctx = gcanvas.getContext('2d');
+        ctx.fillStyle = 'blue' ;
+        ctx.fillRect(pt.x, pt.y, 100, 100) ;
+        ret = true ;
+    }
+
+    return ret;
+}
+
+function showToolTip() {
+    tohandle = undefined ;
+    console.log("timer fired");
+
+    if (pt && tooltip === false) {
+        tooltip = createToolTip() ;
+
+        console.log("created tooltip " + tooltip) ;
+    }
+}
+
+function canvasMouseMove(e) {
+    if (tohandle) {
+        console.log("clear timer");
+        window.clearTimeout(tohandle);
+        tohandle = undefined ;
+    }
+
+    if (tooltip) {
+        let ctx = gcanvas.getContext('2d');
+        ctx.fillStyle = 'white' ;
+        ctx.fillRect(0, 0, gcanvas.width, gcanvas.height);
+        drawGantt(parts[0]) ;
+        tooltip = false ;
+    }
+
+    if (tooltip === false) {
+        
+        let cbounds = gcanvas.getBoundingClientRect();
+        pt = { 
+            x: e.clientX - cbounds.left,
+            y: e.clientY - cbounds.top
+        } ;
+
+        console.log("set timer");
+        window.setTimeout(showToolTip, 5000);
+    }
+}
+
+function canvasLeave(e) {
+    if (tohandle) {
+        window.clearTimeout(tohandle);
+    }
+}
+
 function createCanvas(part) {
     let ganttdiv = document.getElementById('gantt');
     while (ganttdiv.firstChild) {
@@ -120,6 +198,8 @@ function createCanvas(part) {
     let lines = countTotal(part);
 
     gcanvas = document.createElement('canvas');
+    gcanvas.onmousemove = canvasMouseMove;
+    gcanvas.onmouseleave = canvasLeave ;
     ganttdiv.appendChild(gcanvas);
     gcanvas.id = 'ganttcanvas' ;
     gcanvas.width = ganttdiv.clientWidth;
@@ -244,6 +324,7 @@ function doBasic(part) {
     table.className = 'styled-table';
 
     drawingsdiv.appendChild(table);
+    table.appendChild(createPair('Part Number', part.title));
     table.appendChild(createPair('Description', part.desc));
     table.appendChild(createPair('Type', part.ntype));
     table.appendChild(createPair('State', part.state));
@@ -258,12 +339,9 @@ function doBasic(part) {
 }
 
 function initPage() {
-    let title = document.getElementById('title') ;
-    title.style.textAlign = 'center' ;
-    title.style.fontSize = '28px' ;
-    title.innerHTML = "<b>" + partnovalue + "</b>" ;
-
     $.getJSON('/robots/partdata?partno=' + partnovalue, (data) => {
+        parts = data ;
+
         if (data.length != 1)
             return ;
 
