@@ -98,29 +98,27 @@ function drawOneLine(ctx, days, pixels, part) {
         width = part.days / days * pixels ;
 
         if (part.parentPart && part.days > maxParentDays(part)) {
-            ctx.strokeStyle = 'yellow' ;
+            ctx.fillStyle = "rgb(240,230,140)"
+            ctx.strokeStyle = "rgb(255,255,0)" ;
         }
         else {
-            ctx.strokeStyle = 'green' ;
+            ctx.fillStyle = "rgb(50,205,50)"
+            ctx.strokeStyle = "rgb(0,100,0)" ;
         }
 
     }
     else {
         width = pixels ;
-        ctx.strokeStyle = 'red' ;
+        ctx.fillStyle = "rgb(255,0,0)" ;
+        ctx.strokeStyle = "rgb(139,0,0)" ;
     }
 
-    let y = part.drawY + lineSpacing / 2 - lineWidth / 2;
+    let y = part.drawY + lineSpacing / 2 - lineWidth;
+
     ctx.beginPath();
-    ctx.moveTo(deepx, y);
-    ctx.lineTo(deepx + width, y);
+    ctx.roundRect(deepx, y, width, lineWidth, 10);
     ctx.stroke();
-
-    if (part.children) {
-        for(let child of part.children) {
-            drawOneLine(ctx, days, pixels, child);
-        }
-    }
+    ctx.fill();
 
     let daystr ;
     if (isFinite(part.days))
@@ -129,7 +127,14 @@ function drawOneLine(ctx, days, pixels, part) {
         daystr = infinityStr + ' days' ;
     
     ctx.font = durationFont.size + " " + durationFont.name ;
+    ctx.fillStyle = "black" ;
     ctx.fillText(daystr, deepx + width + 10, part.drawY);
+
+    if (part.children) {
+        for(let child of part.children) {
+            drawOneLine(ctx, days, pixels, child);
+        }
+    }
 }
 
 function drawGantt(part) {
@@ -232,7 +237,7 @@ function canvasMouseMove(e) {
             y: e.clientY - cbounds.top
         } ;
 
-        tohandle = window.setTimeout(showToolTip, 1500);
+        tohandle = window.setTimeout(showToolTip, 1000);
         state = stateWaiting ;
     }
 }
