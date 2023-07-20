@@ -87,7 +87,7 @@ function setStudentOrMentor(data, lastone, name, value, choices) {
     var nextone = lastone.nextElementSibling;
     parent.insertBefore(div, nextone);
 
-    let editable = data.admin || (data.student.length == 0 && data.mentor.length == 0);
+    let editable = data.admin || data.state === "Unassigned" ;
 
     var label = document.createElement('label');
     label.for = name;
