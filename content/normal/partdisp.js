@@ -89,6 +89,7 @@ function drawOneLine(ctx, days, pixels, part) {
 function drawGantt(part) {
     deepx = 0 ;
     var ctx = gcanvas.getContext('2d');
+    ctx.fillStyle = 'black' ;
     ctx.font = "24px serif";
     ctx.textBaseline = "top" ;
 
@@ -114,78 +115,95 @@ function countTotal(part) {
     return ret ;
 }
 
+const stateIdle = 0 ;
+const stateWaiting = 1 ;
+const stateDisplaying = 2 ;
 var tohandle = undefined ;
-var tooltip = false ;
-var pt = undefined ;
+let pt = undefined ;
+var state = stateIdle ;
 
-function findPart() {
-    let p = undefined ;
+function findPart(pps) {
+    if (pps === undefined)
+        return undefined ;
 
-    for(let part of parts) {
+    for(let part of pps) {
         if (pt.y > part.drawY && pt.y < part.drawY + lineSpacing) {
-            p = part ;
-            break ;
+            return part ;
         }
     }
 
-    return p ;
+    for(let part of pps) {
+        let p = findPart(part.children) ;
+        if (p !== undefined)
+            return p ;
+    }
+    
+    return undefined ;
 }
 
 function createToolTip() {
-    let ret = false ;
-    let p = findPart() ;
+    let p = findPart(parts) ;
     if (p) {
         let ctx = gcanvas.getContext('2d');
-        ctx.fillStyle = 'blue' ;
-        ctx.fillRect(pt.x, pt.y, 100, 100) ;
-        ret = true ;
-    }
 
-    return ret;
+        ctx.strokeStyle = "rgb(32, 32, 32)";
+        ctx.fillStyle = "rgba(212, 212, 212, 1.0)";
+        ctx.beginPath();
+        ctx.roundRect(pt.x, pt.y, 200, 30, 20);
+        ctx.stroke();
+        ctx.fill();
+
+        ctx.fillStyle = 'black' ;
+        ctx.fillText(p.desc, pt.x + 20, pt.y + 8);
+        state = stateDisplaying ;
+    }
+    else {
+        state = stateIdle ; 
+    }
 }
 
 function showToolTip() {
-    tohandle = undefined ;
-    console.log("timer fired");
-
-    if (pt && tooltip === false) {
-        tooltip = createToolTip() ;
-
-        console.log("created tooltip " + tooltip) ;
+    if (state === stateWaiting) {
+        createToolTip();
     }
 }
 
 function canvasMouseMove(e) {
-    if (tohandle) {
-        console.log("clear timer");
+    if (state === stateWaiting) {
         window.clearTimeout(tohandle);
-        tohandle = undefined ;
+        state = stateIdle ;
     }
-
-    if (tooltip) {
+    else if (state === stateDisplaying) {
         let ctx = gcanvas.getContext('2d');
         ctx.fillStyle = 'white' ;
         ctx.fillRect(0, 0, gcanvas.width, gcanvas.height);
         drawGantt(parts[0]) ;
-        tooltip = false ;
+        state = stateIdle ;
     }
 
-    if (tooltip === false) {
-        
+    if (state === stateIdle) {
         let cbounds = gcanvas.getBoundingClientRect();
         pt = { 
             x: e.clientX - cbounds.left,
             y: e.clientY - cbounds.top
         } ;
 
-        console.log("set timer");
-        window.setTimeout(showToolTip, 5000);
+        tohandle = window.setTimeout(showToolTip, 1500);
+        state = stateWaiting ;
     }
 }
 
 function canvasLeave(e) {
-    if (tohandle) {
+    if (state === stateWaiting) {
         window.clearTimeout(tohandle);
+        state = stateIdle ;
+    }
+    else if (state === stateDisplaying) {
+        let ctx = gcanvas.getContext('2d');
+        ctx.fillStyle = 'white' ;
+        ctx.fillRect(0, 0, gcanvas.width, gcanvas.height);
+        drawGantt(parts[0]) ;
+        state = stateIdle ;
     }
 }
 
