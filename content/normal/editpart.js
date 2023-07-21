@@ -64,7 +64,7 @@ function addOneInput(attr, lastone) {
         input.type = 'text';
     }
     else {
-        alert('Unknown attribute type in page');
+        alert("Unknown attribute type ('" + attr.desc.type + "') in page");
     }
 
     if (attr.desc.required) {

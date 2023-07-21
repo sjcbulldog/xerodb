@@ -8,6 +8,7 @@ import { User } from "./User";
 import { RobotPart } from "./RobotPart";
 import { PartNumber } from "./PartNumber";
 import { OneInstance, PartOrder } from "./PartOrder";
+import { PartType } from "./PartType";
 
 interface LooseObject {
     [key: string]: any
@@ -122,7 +123,7 @@ export class DashboardService extends DatabaseService {
         let current: Date = new Date() ;
 
         for(let one of parts) {
-            if (one.state_ === RobotService.stateDone)
+            if (one.state_ === PartType.stateDone)
                 continue ;
                 
             if (one.doneDaysLate() > 0) {
@@ -346,11 +347,14 @@ export class DashboardService extends DatabaseService {
     }          
 
     private descend(part: RobotPart, quantity: number, path: string[], total: Map<string, PartOrder>, parts: RobotPart[]) {
-        if (part.type_ === RobotService.partTypeCOTS && part.state_ === RobotService.stateReadyToOrder) {
-            if (part.attribs_.get(RobotService.unitCostAttribute)) {
+
+        let pt: PartType | undefined = this.robots_.getPartTypeInfo(part.type_) ;
+
+        if (part.state_ === PartType.stateReadyToOrder) {
+            if (part.attribs_.get(PartType.unitCostAttribute)) {
                 let partpath: string[] = [...path, part.part_.toString()] ;
                 let cost: number = 0.0 ;
-                let coststr: string | undefined = part.attribs_.get(RobotService.unitCostAttribute) ;
+                let coststr: string | undefined = part.attribs_.get(PartType.unitCostAttribute) ;
                 cost = parseFloat(coststr!);
                 let oneinst = new OneInstance(partpath, quantity, cost);
 
@@ -365,7 +369,7 @@ export class DashboardService extends DatabaseService {
                 }
             }
         }
-        else if (part.type_ === RobotService.partTypeAssembly) {
+        else if (pt && pt.canHaveChildren) {
             for(let one of parts) {
                 if (one.isChildOf(part.part_)) {
                     let partpath : string[] = [...path, one.part_.toString()] ;

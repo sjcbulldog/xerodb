@@ -1,11 +1,14 @@
 const leftMargin = 10 ;
-const rightMargin = 60 ;
+const rightMargin = 80 ;
 const topMargin = 10 ;
-const lineSpacing = 30 ;
-const lineWidth = 10 ;
+const lineSpacing = 45 ;
+const lineWidth = 20 ;
 const labelWidth = 200 ;
 const levelIndent = 24 ;
 const tooltipSideMargin = 20 ;
+const tooltipTopBottomMargin = 10 ;
+const tooltipLineSpacing = 6 ;
+
 const tooltipFont = 
 {
     name: 'Arial',
@@ -23,6 +26,12 @@ const durationFont =
     name: 'Arial',
     size: '18px'
 } ;
+const stateFont = 
+{
+    name: 'Arial',
+    size: '14px'
+} ;
+
 const stateIdle = 0 ;
 const stateWaiting = 1 ;
 const stateDisplaying = 2 ;
@@ -58,33 +67,11 @@ function getAllPartsReady(part) {
     return ready
 }
 
-function getTextWidth(font, str) {
-     
-    text = document.createElement("span");
-    document.body.appendChild(text);
- 
-    text.style.font = font.name ;
-    text.style.fontSize = font.size ;
-    text.style.height = 'auto';
-    text.style.width = 'auto';
-    text.style.position = 'absolute';
-    text.style.whiteSpace = 'no-wrap';
-    text.innerHTML = str ;
- 
-    width = Math.ceil(text.clientWidth);
-    document.body.removeChild(text);
-    return width ;
-}
-
 function maxParentDays(part) {
     let ret = 0 ;
-    part = part.parentPart ;
-    while (part) {
-        if (part.days > ret) {
-            ret = part.days ;
-        }
 
-        part = part.parentPart ;
+    if (part.parentPart) {
+        ret = part.parentPart.days ;
     }
 
     return ret ;
@@ -121,18 +108,18 @@ function drawOneLine(ctx, days, pixels, part) {
 
         if (part.parentPart && part.days > maxParentDays(part)) {
             ctx.fillStyle = "rgb(240,230,140)"
-            ctx.strokeStyle = "rgb(255,255,0)" ;
+            ctx.strokeStyle = "rgb(0,0,0)" ;
         }
         else {
             ctx.fillStyle = "rgb(50,205,50)"
-            ctx.strokeStyle = "rgb(0,100,0)" ;
+            ctx.strokeStyle = "rgb(0,0,0)" ;
         }
 
     }
     else {
         width = pixels ;
-        ctx.fillStyle = "rgb(255,0,0)" ;
-        ctx.strokeStyle = "rgb(139,0,0)" ;
+        ctx.fillStyle = "rgb(255,128,128)" ;
+        ctx.strokeStyle = "rgb(0,0,0)" ;
     }
 
     let y = part.drawY + lineSpacing / 2 - lineWidth;
@@ -150,12 +137,27 @@ function drawOneLine(ctx, days, pixels, part) {
     
     ctx.font = durationFont.size + " " + durationFont.name ;
     ctx.fillStyle = "black" ;
-    ctx.fillText(daystr, deepx + width + 10, part.drawY);
+    ctx.fillText(daystr, deepx + width + 15, part.drawY);
 
     if (part.children) {
         for(let child of part.children) {
             drawOneLine(ctx, days, pixels, child);
         }
+    }
+
+    //
+    // Now find the mid point of the bar and output the state for the part
+    //
+    ctx.font = stateFont.size + " " + stateFont.name ;
+    let dims = ctx.measureText(part.state + ':' + part.desc) ;
+    if (width > dims.width + 15) {
+        ctx.fillStyle = "black" ;
+        ctx.fillText(part.state + ':' + part.desc, deepx + 20, part.drawY + 6);
+    }
+    else if (width > 100) {
+        ctx.font = stateFont.size + " " + stateFont.name ;
+        ctx.fillStyle = "black" ;
+        ctx.fillText(part.state, deepx + 20, part.drawY + 6);
     }
 }
 
@@ -212,18 +214,28 @@ function createToolTip() {
     if (p) {
         let ctx = gcanvas.getContext('2d');
 
-        let width = getTextWidth(tooltipFont, p.desc);
+        ctx.font = tooltipFont.size + " " + tooltipFont.name ;
+        let dims = ctx.measureText(p.desc) ;
+        let w = dims.width ;
+        let h1 = dims.actualBoundingBoxAscent + dims.actualBoundingBoxDescent ;
+        dims = ctx.measureText(p.state) ;
+        let h2 = dims.actualBoundingBoxAscent + dims.actualBoundingBoxDescent ;
+        if (dims.width > w) {
+            w = dims.width ;
+        }
 
         ctx.strokeStyle = "rgb(32, 32, 32)";
         ctx.fillStyle = "rgba(212, 212, 212, 1.0)";
         ctx.beginPath();
-        ctx.roundRect(pt.x, pt.y, width + 2 * tooltipSideMargin, 30, 20);
+        ctx.roundRect(pt.x, pt.y, w + 2 * tooltipSideMargin, tooltipTopBottomMargin + h1 + h2 + tooltipTopBottomMargin + tooltipLineSpacing, 20);
         ctx.stroke();
         ctx.fill();
 
+        ctx.textBaseline = 'top' ;
         ctx.fillStyle = 'black' ;
-        ctx.font = tooltipFont.size + ' ' + tooltipFont.size ;
-        ctx.fillText(p.desc, pt.x + tooltipSideMargin, pt.y + 8);
+        ctx.font = tooltipFont.size + ' ' + tooltipFont.name ;
+        ctx.fillText(p.desc, pt.x + tooltipSideMargin, pt.y + tooltipTopBottomMargin);
+        ctx.fillText(p.state, pt.x + tooltipSideMargin, pt.y + h1 + tooltipTopBottomMargin + tooltipLineSpacing);
         state = stateDisplaying ;
     }
     else {
@@ -285,7 +297,7 @@ function canvasDoubleClick(e) {
 
     let p = findPart(parts, mpt)
     if (p) {
-        window.location.href = "/robots/editpart?partno=" + p.key + "&parttype=" + p.ntype + "&retplace=/robots/viewrobot$$$ROBOTID$$$";
+        window.location.href = "/robots/editpart?partno=" + p.key + "&parttype=" + p.ntype + "&retplace=/robots/partdisp?partno=" + partnovalue;
     }
 }
 

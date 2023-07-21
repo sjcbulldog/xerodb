@@ -16,6 +16,10 @@ import { sendEmail } from './mail';
 import { packFiles, packLinks, unpackFiles, unpackLinks } from './dbutils';
 import { PartDrawing } from './PartDrawing';
 import { DrawingsService } from './DrawingsService';
+import { ManufacturedPartType } from './ManufacturedPartType';
+import { COTSPartType } from './COTSPartType';
+import { AssemblyPartType } from './AssemblyPartType';
+import { PartType } from './PartType';
 
 interface LooseObject {
     [key: string]: any
@@ -23,190 +27,9 @@ interface LooseObject {
 
 export class RobotService extends DatabaseService {
     public static readonly robotFileName: string = 'robot.db';
-    public static readonly partTypeCOTS: string = 'C';
-    public static readonly partTypeAssembly: string = 'A';
-    public static readonly partTypeManufactured: string = 'M';
-
-    public static readonly stateUnassigned: string = "Unassigned" ;
-    public static readonly stateAssigned: string = "Assigned" ;
-    public static readonly stateReadyToOrder: string = "Ready To Order" ;
-    public static readonly stateOrdered: string = "Ordered" ;
-    public static readonly stateWaitingForParts: string = "Waiting For Parts" ;
-    public static readonly stateReadyForAssembly: string = "Ready For Assembly" ;
-    public static readonly stateInAssembly: string = "In Assembly" ;
-    public static readonly stateReadyForMentorCheck: string = "Ready For Mentor Check"
-    public static readonly stateReadyForCAD: string = "Ready For CAD" ;
-    public static readonly stateInCAD: string = "In CAD" ;
-    public static readonly stateReadyForDrawingCheck: string = "Ready For Drawing Check" ;
-    public static readonly stateReadyForCAM: string = "Ready For CAM" ;
-    public static readonly stateInCAM: string = "In CAM" ;
-    public static readonly stateReadyForBuild: string = "Ready For Build" ;
-    public static readonly stateInBuild: string = "In Build" ;
-    public static readonly stateReadyForBuildCheck: string = "Ready For Build Check" ;    
-    public static readonly stateDone: string = "Done" ;
-
-    private static readonly methodStudent = "student" ;
-    private static readonly methodMentor = "mentor" ;
-    private static readonly methodAnyone = "anyone" ;
-    private static readonly methodAssignedStudent = "assigned-student" ;
-    private static readonly methodAssignedMentor = "assigned-mentor" ;
-
-    public static readonly unitCostAttribute = 'Unit Cost' ;
-
     private static readonly doubleClickMessage = 'Double Click To Edit' ;
 
-    private static readonly manufacturing_types_ = [
-        "By Hand",
-        "Manual Mill",
-        "Lathe",
-        "Omio",
-        "Velox",
-        "CNC Mill",
-        "EZTrak",
-        "Glowforge",
-        "3D Print"
-    ] ;
-
-    private static readonly material_types_ = [
-        "Polycarbonate",
-        "Aluminum",
-        "Delrin",
-        "PLA",
-        "ABS",
-        "Onyx"
-    ]
-
-    private static readonly COTSAttributes = [
-        new PartAttr('Vendor Name', PartAttr.TypeStringName, true, ''),
-        new PartAttr('Vendor Site', PartAttr.TypeStringName, true, ''),
-        new PartAttr('Vendor Part Number', PartAttr.TypeStringName, false, ''),
-        new PartAttr(RobotService.unitCostAttribute, PartAttr.TypeCurrencyName, false, '0.0'),
-    ];
-
-    private static readonly COTSStates = [
-        new PartState(RobotService.stateUnassigned, 
-            [
-                // System will transition when both student and mentor are assigned
-            ]),
-        new PartState(RobotService.stateAssigned, 
-            [
-                new NextState(RobotService.stateReadyToOrder, RobotService.methodStudent),
-                new NextState(RobotService.stateOrdered, RobotService.methodMentor),
-                new NextState(RobotService.stateDone, RobotService.methodAnyone),
-            ]),
-        new PartState(RobotService.stateReadyToOrder,
-            [
-                new NextState(RobotService.stateOrdered, RobotService.methodMentor),
-                new NextState(RobotService.stateDone, RobotService.methodMentor)
-            ]),
-        new PartState(RobotService.stateOrdered,
-            [
-                new NextState(RobotService.stateDone, RobotService.methodAnyone),
-                new NextState(RobotService.stateAssigned, RobotService.methodMentor),
-                new NextState(RobotService.stateReadyToOrder, RobotService.methodMentor)
-            ]),
-        new PartState(RobotService.stateDone,
-            [
-                new NextState(RobotService.stateAssigned, RobotService.methodMentor),
-                new NextState(RobotService.stateOrdered, RobotService.methodMentor),
-                new NextState(RobotService.stateReadyToOrder, RobotService.methodMentor)
-            ]),
-    ] ;
-
-    private static readonly AssemblyAttributes = [
-    ];
-
-    private static readonly AssemblyStates = [
-        new PartState(RobotService.stateUnassigned, 
-            [
-                // System will transition when both student and mentor are assigned                
-            ]),
-        new PartState(RobotService.stateAssigned,
-            [
-                new NextState(RobotService.stateWaitingForParts, RobotService.methodStudent),
-            ]),
-        new PartState(RobotService.stateWaitingForParts,
-            [
-                // System will transition to ReadyForAssembly when all child parts are 'Done'
-            ]),
-        new PartState(RobotService.stateReadyForAssembly,
-            [
-                new NextState(RobotService.stateInAssembly, RobotService.methodStudent),
-            ]),
-        new PartState(RobotService.stateInAssembly,
-            [
-                new NextState(RobotService.stateReadyForMentorCheck, RobotService.methodStudent),
-            ]),
-        new PartState(RobotService.stateReadyForMentorCheck,
-            [
-                new NextState(RobotService.stateWaitingForParts, RobotService.methodMentor),
-                new NextState(RobotService.stateReadyForAssembly, RobotService.methodMentor),
-                new NextState(RobotService.stateInAssembly, RobotService.methodAnyone),
-                new NextState(RobotService.stateDone, RobotService.methodMentor),
-            ]),
-        new PartState(RobotService.stateDone,
-            [
-                new NextState(RobotService.stateWaitingForParts, RobotService.methodMentor),
-                new NextState(RobotService.stateReadyForAssembly, RobotService.methodMentor),
-                new NextState(RobotService.stateInAssembly, RobotService.methodMentor),
-            ]),
-    ] ;
-
-    private static readonly ManufacturedAttributes = [
-        new PartAttr('Machine', PartAttr.TypeChoiceName, true, '').setChoices(RobotService.manufacturing_types_),
-        new PartAttr('Material', PartAttr.TypeChoiceName, true, '').setChoices(RobotService.material_types_),
-        new PartAttr('Dimension', PartAttr.TypeDoubleName, true, ''),
-        new PartAttr(RobotService.unitCostAttribute, PartAttr.TypeCurrencyName, false, '0.0')
-    ];
-
-    private static readonly ManufacturedStates = [
-        // States: new, requested, ordered, complete
-        new PartState(RobotService.stateUnassigned, 
-            [
-            ]),
-        new PartState(RobotService.stateAssigned,
-            [
-                new NextState(RobotService.stateReadyForCAD, RobotService.methodStudent),
-            ]),          
-        new PartState(RobotService.stateReadyForCAD,
-            [
-                new NextState(RobotService.stateInCAD, RobotService.methodAnyone),
-            ]),      
-        new PartState(RobotService.stateInCAD,
-            [
-                new NextState(RobotService.stateReadyForDrawingCheck, RobotService.methodAnyone),
-                new NextState(RobotService.stateReadyForCAD, RobotService.methodAnyone),
-            ]),
-        new PartState(RobotService.stateReadyForDrawingCheck,
-            [
-                new NextState(RobotService.stateReadyForCAM, RobotService.methodMentor),
-                new NextState(RobotService.stateReadyForBuild, RobotService.methodMentor),
-                new NextState(RobotService.stateInCAD, RobotService.methodAnyone),
-            ]),
-        new PartState(RobotService.stateReadyForCAM,
-            [
-                new NextState(RobotService.stateInCAM, RobotService.methodAnyone),
-            ]),
-        new PartState(RobotService.stateInCAM,
-            [
-                new NextState(RobotService.stateReadyForCAM, RobotService.methodAnyone),
-                new NextState(RobotService.stateReadyForBuild, RobotService.methodAnyone),
-            ]),
-        new PartState(RobotService.stateReadyForBuild,
-            [
-                new NextState(RobotService.stateInBuild, RobotService.methodAnyone),
-                new NextState(RobotService.stateInCAD, RobotService.methodAnyone),
-                new NextState(RobotService.stateInCAM, RobotService.methodAnyone),
-            ]),
-        new PartState(RobotService.stateInBuild,
-            [
-                new NextState(RobotService.stateReadyForBuildCheck, RobotService.methodAnyone),
-            ]),
-        new PartState(RobotService.stateReadyForBuildCheck,
-            [
-                new NextState(RobotService.stateDone, RobotService.methodMentor),
-            ]),
-    ] ;    
+    private parttypes_: Map<string, PartType> = new Map<string, PartType>() ;
 
     private nextkey_: number;
     private robots_: Map<number, Robot>;
@@ -216,6 +39,15 @@ export class RobotService extends DatabaseService {
 
     constructor(rootdir: string, users: UserService, audit: AuditService) {
         super('RobotService', path.join(rootdir, RobotService.robotFileName));
+
+        let pt: PartType ;
+
+        pt = new COTSPartType() ;
+        this.parttypes_.set(pt.typech, pt) ;
+        pt = new AssemblyPartType() ;
+        this.parttypes_.set(pt.typech, pt);
+        pt = new ManufacturedPartType() ;
+        this.parttypes_.set(pt.typech, pt);
 
         this.users_ = users;
         this.audit_ = audit ;
@@ -332,6 +164,10 @@ export class RobotService extends DatabaseService {
                 }
             }
         }) ;
+    }
+
+    public getPartTypeInfo(type: string) : PartType | undefined {
+        return this.parttypes_.get(type);
     }
 
     public setDrawingsService(service: DrawingsService) {
@@ -644,8 +480,8 @@ export class RobotService extends DatabaseService {
     }
 
     private async updatePart(u: User, part: RobotPart, prev: RobotPart): Promise<void> {
-        if (part.state_ == RobotService.stateUnassigned && part.student_.length > 0 && part.mentor_.length > 0) {
-            part.state_ = RobotService.stateAssigned ;
+        if (part.state_ == PartType.stateUnassigned && part.student_.length > 0 && part.mentor_.length > 0) {
+            part.state_ = PartType.stateAssigned ;
         }
 
         let sql: string = 'UPDATE parts SET';
@@ -730,9 +566,9 @@ export class RobotService extends DatabaseService {
                         reject(err);
                     }
                     else {
-                        if (parentpart && parentpart.state_ == RobotService.stateReadyForAssembly) {
+                        if (parentpart && parentpart.state_ == PartType.stateReadyForAssembly) {
                             let prevparent: RobotPart = parentpart.clone();
-                            parentpart.state_ = RobotService.stateWaitingForParts ;
+                            parentpart.state_ = PartType.stateWaitingForParts ;
                             this.updatePart(u, parentpart, prevparent);
                         }
                         xeroDBLoggerLog('INFO', 'UserService: added part "' + partno.toString() + '" to the database');
@@ -751,35 +587,23 @@ export class RobotService extends DatabaseService {
     }
 
     private getAttributes(part: RobotPart): PartAttr[] {
-        let ret: PartAttr[] = [];
+        let ret: PartAttr[] = [] ;
 
-        if (part.type_ === RobotService.partTypeAssembly) {
-            ret = RobotService.AssemblyAttributes;
-        }
-        else if (part.type_ === RobotService.partTypeCOTS) {
-            ret = RobotService.COTSAttributes;
-        }
-        else if (part.type_ === RobotService.partTypeManufactured) {
-            ret = RobotService.ManufacturedAttributes;
+        if (this.parttypes_.has(part.type_)) {
+            ret = this.parttypes_.get(part.type_)!.attributes ;
         }
 
-        return ret;
+        return ret ;
     }
 
     private getStates(part: RobotPart): PartState[] {
-        let ret: PartState[] = [];
+        let ret: PartState[] = [] ;
 
-        if (part.type_ === RobotService.partTypeAssembly) {
-            ret = RobotService.AssemblyStates;
-        }
-        else if (part.type_ === RobotService.partTypeCOTS) {
-            ret = RobotService.COTSStates;
-        }
-        else if (part.type_ === RobotService.partTypeManufactured) {
-            ret = RobotService.ManufacturedStates;
+        if (this.parttypes_.has(part.type_)) {
+            ret = this.parttypes_.get(part.type_)!.flow ;
         }
 
-        return ret;
+        return ret ;
     }
 
     private applyAttributes(part: RobotPart) {
@@ -887,7 +711,7 @@ export class RobotService extends DatabaseService {
             //
             // A fail safe for bugs to given an out
             //
-            state = RobotService.stateUnassigned ;
+            state = PartType.stateUnassigned ;
         }
 
         let parentNum: PartNumber | null = null ;
@@ -981,31 +805,31 @@ export class RobotService extends DatabaseService {
                 }
                 else {
                     switch(next.method_) {
-                        case RobotService.methodAnyone:
+                        case PartType.methodAnyone:
                             valid = true ;
                             break; 
 
-                        case RobotService.methodAssignedMentor:
+                        case PartType.methodAssignedMentor:
                             if ((part.mentor_.length === 0 && u.isRole('mentor')) || (part.mentor_ === u.username_))
                             {
                                 valid = true ;
                             }
                             break; 
 
-                        case RobotService.methodAssignedStudent:
+                        case PartType.methodAssignedStudent:
                             if (part.student_.length === 0 || part.student_ === u.username_)
                             {
                                 valid = true ;
                             }
                             break ;
 
-                        case RobotService.methodMentor:
+                        case PartType.methodMentor:
                             if (u.isRole(UserService.roleMentor)) {
                                 valid = true ;
                             }
                             break;
 
-                        case RobotService.methodStudent:
+                        case PartType.methodStudent:
                             if (u.isRole(UserService.roleStudent)) {
                                 valid = true ;
                             }
@@ -1026,24 +850,20 @@ export class RobotService extends DatabaseService {
         let ret: LooseObject = {};
         let title: string = part.part_.toString();
         let icon: string;
+        let folder: boolean ;
 
         let ntype: string = "";
 
-        if (part.type_ === RobotService.partTypeAssembly) {
-            icon = '/nologin/images/empty.png';
-            ntype = 'Assembly';
-        }
-        else if (part.type_ === RobotService.partTypeCOTS) {
-            icon = '/nologin/images/file.png';
-            ntype = 'COTS';
-        }
-        else if (part.type_ === RobotService.partTypeManufactured) {
-            icon = '/nologin/images/file.png';
-            ntype = 'Manufactured';
+        let pt: PartType | undefined = this.parttypes_.get(part.type_) ;
+        if (pt) {
+            icon = pt.icon ;
+            ntype = pt.fullTypeName ;
+            folder = pt.canHaveChildren;
         }
         else {
             icon = '/nologin/images/file.png';
             ntype = '?';
+            folder = false ;
         }
 
         ret['title'] = title;
@@ -1086,9 +906,7 @@ export class RobotService extends DatabaseService {
         else
             ret['notes'] = '' ;
 
-        if (part.type_ === RobotService.partTypeAssembly) {
-            ret['folder'] = true;
-        }
+        ret['folder'] = folder;
 
         let drawings: LooseObject[] = [] ;
         for(let one of part.drawings_) {
@@ -1141,7 +959,8 @@ export class RobotService extends DatabaseService {
             if (part.isChildOf(parent)) {
                 let child: LooseObject = this.partToLoose(null, part);
                 this.appendChild(obj, child);
-                if (part.type_ === RobotService.partTypeAssembly && depth < 100) {
+                let pt = this.parttypes_.get(part.type_) ;
+                if (pt && pt.canHaveChildren && depth < 100) {
                     this.addChildren(child, part.part_, parts, depth + 1);
                 }
             }
@@ -1189,9 +1008,9 @@ export class RobotService extends DatabaseService {
             //
             // Make a copy of the part, with the new part number and place it under the given parent
             //
-            let st: string = RobotService.stateUnassigned ;
+            let st: string = PartType.stateUnassigned ;
             if (part.student_.length > 0 && part.mentor_.length > 0) {
-                st = RobotService.stateAssigned ;
+                st = PartType.stateAssigned ;
             }
             await this.createNewPart(u, parent, newpartno, part.quantity_, st, part.type_, part.description_, 
                                     this.copyAttributes(part.attribs_), part.student_, part.mentor_);
@@ -1199,7 +1018,8 @@ export class RobotService extends DatabaseService {
             //
             // Now, if the part is an assembly, it might have children
             //
-            if (part.type_ === RobotService.partTypeAssembly) {
+            let pt : PartType | undefined = this.parttypes_.get(part.type_) ;
+            if (pt && pt.canHaveChildren) {
                 for(let one of parts) {
                     if (one.isChildOf(part.part_)) {
                         //
@@ -1217,7 +1037,8 @@ export class RobotService extends DatabaseService {
 
     private async deleteOnePart(part: RobotPart, parts: RobotPart[]) : Promise<void> {
         let ret: Promise<void> = new Promise<void>( async (resolve, reject) => {
-            if (part.type_ == RobotService.partTypeAssembly) {
+            let pt : PartType | undefined = this.parttypes_.get(part.type_) ;
+            if (pt && pt.canHaveChildren) {
                 for(let one of parts) {
                     if (one.isChildOf(part.part_)) {
                         //
@@ -1245,14 +1066,15 @@ export class RobotService extends DatabaseService {
 
     private async checkAssembly(u: User, part:RobotPart, parts: RobotPart[]) : Promise<void> {
         let ret: Promise<void> = new Promise<void>( async (resolve, reject) => { 
-            if (part.state_ === RobotService.stateWaitingForParts) {
+            if (part.state_ === PartType.stateWaitingForParts) {
                 let done: boolean = true ;
                 for(let one of parts) {
                     if (one.isChildOf(part.part_)) {
-                        if (one.state_ !== RobotService.stateDone) {
-                            if (one.type_ === RobotService.partTypeAssembly) {
+                        if (one.state_ !== PartType.stateDone) {
+                            let pt : PartType | undefined = this.parttypes_.get(one.type_) ;
+                            if (pt && pt.canHaveChildren) {
                                 this.checkAssembly(u, one, parts) ;
-                                if (one.state_ !== RobotService.stateDone) {
+                                if (one.state_ !== PartType.stateDone) {
                                     done = false ;
                                 }
                             }
@@ -1265,7 +1087,7 @@ export class RobotService extends DatabaseService {
 
                 if (done) {
                     let prev: RobotPart = part.clone() ;
-                    part.state_ = RobotService.stateReadyForAssembly ;
+                    part.state_ = PartType.stateReadyForAssembly ;
                     await this.updatePart(u, part, prev) ;
                 }
             }
@@ -1279,25 +1101,25 @@ export class RobotService extends DatabaseService {
     private checkStudentChange(u:User, part: RobotPart, prev: RobotPart) : boolean {
         let change: boolean = false ;
         
-        if (part.type_ === RobotService.partTypeManufactured) {
+        if (part.type_ === 'M') {       // TODO: fix this
             //
             // There are a set of transitions here
             //
-            if (prev.state_ === RobotService.stateReadyForBuild && part.state_ === RobotService.stateInBuild) {
+            if (prev.state_ === PartType.stateReadyForBuild && part.state_ === PartType.stateInBuild) {
                 part.student_ = u.username_ ;
                 change = true ;
             }
-            else if (prev.state_ === RobotService.stateReadyForCAD && part.state_ === RobotService.stateInCAD) {
+            else if (prev.state_ === PartType.stateReadyForCAD && part.state_ === PartType.stateInCAD) {
                 part.student_ = u.username_ ;
                 change = true ;
             }
-            else if (prev.state_ === RobotService.stateReadyForCAM && part.state_ === RobotService.stateInCAM) {
+            else if (prev.state_ === PartType.stateReadyForCAM && part.state_ === PartType.stateInCAM) {
                 part.student_ = u.username_ ;
                 change = true ;
             }
         }
-        else if (part.type_ === RobotService.partTypeAssembly) {
-            if (prev.state_ === RobotService.stateReadyForAssembly && part.state_ === RobotService.stateInAssembly) {
+        else if (part.type_ === 'A') {      // TODO: fix this
+            if (prev.state_ === PartType.stateReadyForAssembly && part.state_ === PartType.stateInAssembly) {
                 part.student_ = u.username_ ;
                 change = true ;
             }
@@ -1333,8 +1155,9 @@ export class RobotService extends DatabaseService {
         let desc: string = 'Top Level Robot Subsystem' ;
         let comppart: PartNumber = await this.getNextPartNumber(new PartNumber(robotno, 'COMP', 0)) ;
         let pracpart: PartNumber = await this.getNextPartNumber(new PartNumber(robotno, 'PRAC', 0)) ;
-        await this.createNewPart(u, null, comppart, 1, RobotService.stateUnassigned, RobotService.partTypeAssembly, "Competition Robot Top Assembly", attribs, '', '');
-        await this.createNewPart(u, null, pracpart, 1, RobotService.stateUnassigned, RobotService.partTypeAssembly, "Practice Robot Top Assembly", attribs, '', '');
+        // TODO: fix this
+        await this.createNewPart(u, null, comppart, 1, PartType.stateUnassigned, 'A', "Competition Robot Top Assembly", attribs, '', '');
+        await this.createNewPart(u, null, pracpart, 1, PartType.stateUnassigned, 'A', "Practice Robot Top Assembly", attribs, '', '');
 
         let current = this.now();
 
@@ -1520,7 +1343,7 @@ export class RobotService extends DatabaseService {
         if (req.query.abbrev && req.query.abbrev.length > 0)
             abbrev = req.query.abbrev ;
         let newpartno: PartNumber = await this.getNextPartNumber(new PartNumber(parent.robot_, abbrev, 0)) ;
-        await this.createNewPart(u, parent, newpartno, 1, RobotService.stateUnassigned, type, RobotService.doubleClickMessage, attribs, '', '') ;
+        await this.createNewPart(u, parent, newpartno, 1, PartType.stateUnassigned, type, RobotService.doubleClickMessage, attribs, '', '') ;
 
         let url: string = '/robots/viewrobot?robotid=' + parent.robot_ ;
         res.redirect(url);
@@ -1599,6 +1422,7 @@ export class RobotService extends DatabaseService {
         if (req.body.retplace !== undefined) {
             url = req.body.retplace ;
             url = url.replace("$$$ROBOTID$$$", "?robotid=" + part.part_.robot_) ;
+            url = url.replace("$$$PARTNO$$$", "?partno=" + part.part_.toString()) ;
         }
 
         res.redirect(url);
@@ -1766,13 +1590,15 @@ export class RobotService extends DatabaseService {
     }
 
     private async manufacturingtypes(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
-        res.json(RobotService.manufacturing_types_);
+        // TODO: fix this
+        res.json(ManufacturedPartType.manufacturing_types_) ;
     }
 
     private getCost(part: RobotPart, parts: RobotPart[]) : number {
         let ret: number = 0 ;
 
-        if (part.type_ === RobotService.partTypeAssembly) {
+        let pt: PartType | undefined = this.parttypes_.get(part.type_) ;
+        if (pt && pt.canHaveChildren) {
             for(let other of parts) {
                 if (other.isChildOf(part.part_)) {
                     ret += this.getCost(other, parts) ;
@@ -1780,7 +1606,7 @@ export class RobotService extends DatabaseService {
             }
         }
         else {
-            let cost = part.attribs_.get(RobotService.unitCostAttribute) ;
+            let cost = part.attribs_.get(PartType.unitCostAttribute) ;
             if (cost) {
                 ret = parseFloat(cost) ;
             }
@@ -1878,7 +1704,8 @@ export class RobotService extends DatabaseService {
             let newnum: PartNumber = await this.getNextPartNumber(temp);
             await this.updatePartNumbers(u, part, newnum, parent);
 
-            if (part.type_ === RobotService.partTypeAssembly) {
+            let pt: PartType | undefined = this.parttypes_.get(part.type_) ;
+            if (pt && pt.canHaveChildren) {
                 for(let one of parts) {
                     if (one.isChildOf(oldnum)) {
                         // This is a child of the part we are renaming
