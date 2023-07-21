@@ -36,6 +36,28 @@ var maxdays = 0 ;
 var infinityStr = '\u221E'
 var parts;
 
+function getAllPartsReady(part) {
+    let ready = new Date() ;
+
+    for(let child of part.children) {
+        let partDoneDate = undefined ;
+
+        if (child.ntype.startsWith('A')) {
+            // Assembly
+            partDoneDate = getAllPartsReady(child) ;
+        }
+        else {
+            partDoneDate = child.donedate ;
+        }
+
+        if (partDoneDate.getTime() > ready.getTime()) {
+            ready = partDoneDate ;
+        }
+    }
+
+    return ready
+}
+
 function getTextWidth(font, str) {
      
     text = document.createElement("span");
@@ -165,8 +187,6 @@ function countTotal(part) {
 
     return ret ;
 }
-
-
 
 function findPart(pps, tpt) {
     if (pps === undefined)
