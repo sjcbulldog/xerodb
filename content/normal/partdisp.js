@@ -45,26 +45,34 @@ var maxdays = 0 ;
 var infinityStr = '\u221E'
 var parts;
 
-function getAllPartsReady(part) {
+function getAllPartsReady(part, addme) {
     let ready = new Date() ;
 
-    for(let child of part.children) {
-        let partDoneDate = undefined ;
-
-        if (child.ntype.startsWith('A')) {
-            // Assembly
-            partDoneDate = getAllPartsReady(child) ;
-        }
-        else {
-            partDoneDate = child.donedate ;
-        }
-
-        if (partDoneDate.getTime() > ready.getTime()) {
-            ready = partDoneDate ;
+    if (part.children) {
+        for(let child of part.children) {
+            let partDoneDate = getAllPartsReady(child, true) ;
+            if (partDoneDate === undefined)
+                return undefined ;
+            
+            if (partDoneDate.getTime() > ready.getTime())
+                ready = partDoneDate ;
         }
     }
 
-    return ready
+    if (addme) {
+        let v = Date.parse(part.donedate) ;
+        if (isNaN(v)) {
+            return undefined ;
+        }
+
+        if (v > ready.getTime()) {
+            let tmp = new Date(v);
+            let tmp2 = ready.getTime() ;
+            ready = new Date(v);
+        }
+    }
+
+    return ready ;
 }
 
 function maxParentDays(part) {
@@ -99,35 +107,69 @@ function drawOneLabel(ctx, part, x, y) {
     return y ;
 }
 
+function dateToString(d) {
+    return d.getMonth() + "/" + d.getDay() + "/" + d.getYear() ;
+}
+
 function drawOneLine(ctx, days, pixels, part) {
 
-    let width ;
+    let w1 ;
+    let w2 ;
+    let f1 ;
+    let f2 ;
     
     if (isFinite(part.days)) {
-        width = part.days / days * pixels ;
+        let width = part.days * pixels / days ;
 
-        if (part.parentPart && part.days > maxParentDays(part)) {
-            ctx.fillStyle = "rgb(240,230,140)"
-            ctx.strokeStyle = "rgb(0,0,0)" ;
+        if (part.ntype.startsWith('A')) {
+            let d1 = getAllPartsReady(part, false) ;
+            if (d1) {
+                let dnow = new Date() ;
+                let diffms = d1.getTime() - dnow;
+                let diffdays = Math.ceil(diffms / (1000 * 3600 * 24)) ;
+                w1 = diffdays * pixels / days ;
+                w2 = width - w1 ;
+            }
+            else {
+                w1 = width ;
+                w2 = 0 ;
+            }
         }
         else {
-            ctx.fillStyle = "rgb(50,205,50)"
-            ctx.strokeStyle = "rgb(0,0,0)" ;
+            w1 = width ;
+            w2 = 0 ;
         }
 
+        if (part.parentPart && part.days > maxParentDays(part)) {
+            f1 = "rgb(240,230,140)" ;
+            f2 = "rgb(240,230,140)" ;
+        }
+        else {
+            f1 = "rgb(124,252,0)" ;
+            f2 = "rgb(154,205,50)" ;
+        }
     }
     else {
-        width = pixels ;
-        ctx.fillStyle = "rgb(255,128,128)" ;
-        ctx.strokeStyle = "rgb(0,0,0)" ;
+        w1 = pixels ;
+        w2 = 0 ;
+        f1 = "rgb(255,128,128)" ;
+        f1 = "rgb(255,128,128)" ;
     }
 
     let y = part.drawY + lineSpacing / 2 - lineWidth;
 
+    ctx.fillStyle = f1 ;
+    ctx.fillRect(deepx + 2, y, w1 - 1, lineWidth) ;
+
+    ctx.fillStyle = f2 ;
+    ctx.fillRect(deepx + w1, y, w2 - 2, lineWidth);
+
+    ctx.fillStyle = undefined ;
+    ctx.strokeStyle = "rgb(0, 0, 0)" ;
+    ctx.lineWidth = 4 ;
     ctx.beginPath();
-    ctx.roundRect(deepx, y, width, lineWidth, 10);
+    ctx.roundRect(deepx, y, w1 + w2, lineWidth, 6);
     ctx.stroke();
-    ctx.fill();
 
     let daystr ;
     if (isFinite(part.days))
@@ -137,7 +179,7 @@ function drawOneLine(ctx, days, pixels, part) {
     
     ctx.font = durationFont.size + " " + durationFont.name ;
     ctx.fillStyle = "black" ;
-    ctx.fillText(daystr, deepx + width + 15, part.drawY);
+    ctx.fillText(daystr, deepx + w1+w2 + 15, part.drawY);
 
     if (part.children) {
         for(let child of part.children) {
@@ -150,11 +192,11 @@ function drawOneLine(ctx, days, pixels, part) {
     //
     ctx.font = stateFont.size + " " + stateFont.name ;
     let dims = ctx.measureText(part.state + ':' + part.desc) ;
-    if (width > dims.width + 15) {
+    if (w1 + w2 > dims.width + 15) {
         ctx.fillStyle = "black" ;
         ctx.fillText(part.state + ':' + part.desc, deepx + 20, part.drawY + 6);
     }
-    else if (width > 100) {
+    else if (w1 + w2 > 100) {
         ctx.font = stateFont.size + " " + stateFont.name ;
         ctx.fillStyle = "black" ;
         ctx.fillText(part.state, deepx + 20, part.drawY + 6);
