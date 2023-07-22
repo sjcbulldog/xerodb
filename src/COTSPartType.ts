@@ -27,7 +27,7 @@ export class COTSPartType extends PartType
             new PartState(PartType.stateReadyToOrder,
                 [
                     new NextState(PartType.stateOrdered, PartType.methodMentor),
-                    new NextState(PartType.stateDone, PartType.methodMentor)
+                    new NextState(PartType.stateDone, PartType.methodAnyone)
                 ]),
             new PartState(PartType.stateOrdered,
                 [
