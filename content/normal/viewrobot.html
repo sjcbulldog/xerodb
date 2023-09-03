@@ -5,7 +5,9 @@
     <script type="text/javascript" src="/nologin/jquery/jquery-ui.js"></script>
     <script type="text/javascript" src="/normal/viewrobot.js"></script>
     <script type="text/javascript" src="/nologin/wunderbaum/wunderbaum.umd.js"></script>
+    <script type="text/javascript" src="/nologin/jquery/jquery.contextmenu.js"></script>
 
+    <link rel="stylesheet" href="/nologin/jquery/jquery.contextmenu.css">
     <link rel="stylesheet" href="/nologin/jquery/jquery-ui.css"/>
     <link rel="stylesheet" media="screen" href="/nologin/wunderbaum/wunderbaum.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.9.0/font/bootstrap-icons.css" />
@@ -17,25 +19,12 @@
     <div id="context"></div>
     <section id="content">
         <div id="dialog-confirm"></div>
-        <div id="parttree" style="height: 80vh"></div>        
+        <div id="parttree" style="height: 90vh"></div>        
         <div id="costdiv" style="text-align: center;"><b>
             <p id="costs">Total Robot Cost: $0.00</p>
             </b>
-        </div>
-        <div id="commands">
-            <div id="cmdchild">
-                'A' to add a new assembly<br>
-                'C' to add a new COTS part<br>
-                'M' to add a new manufactured part<br>
-                'R' to rename an assembly and its children<br>
-                'P' to view a part, its depencies, and its drawings<br>
-            </div>
-            <div id="cmdchild">
-                'D' to view/edit part drawings<br>
-                'Delete' to delete selectedpart<br><br>
-                Drag parts to move them to new location<br>
-                Control-Drag to make a copy of parts in a new location<br>
-            </div>
+            <br>
+            Use Right Click Menu Above To Access Part Functions
         </div>
     </section>
 </div>

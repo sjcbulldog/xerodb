@@ -24,7 +24,6 @@
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.3",
-    "rotating-file-stream": "^3.1.0",
     "sqlite3": "^5.1.6"
   },
   "devDependencies": {

@@ -13,6 +13,78 @@ function updateCosts() {
     });
 }
 
+function isCurrentPartAssembly() {
+    if (parttree === undefined || parttree === null)
+        return false ;
+
+    if (parttree.activeNode === null || parttree.activeNode === undefined)
+        return false ;
+
+    return parttree.activeNode.data.ntype.startsWith('A') ;
+}
+
+function renameAssembly() {
+    while (true) {
+        abbrev = window.prompt('Enter Abbreviation For This Assembly (leave blank to inherit from parent)');
+        if (abbrev === null) {
+            return;
+        }
+
+        if (abbrev.length === 0 || /^[a-zA-Z]+$/.test(abbrev)) {
+            break;
+        }
+
+        alert('Abbreviations for assemblies must be all letters');
+    }
+
+    // Rename the assembly name
+    window.location.href = "/robots/rename?partno=" + parttree.activeNode.key + "&abbrev=" + abbrev;    
+}
+
+function deletePart() {
+    if (parttree.activeNode.key === '001-COMP-00001' || parttree.activeNode.key === '001-PRAC-00001') {
+        alert('You cannot delete the top most comp bot or practice bot.');
+        return;
+    }
+
+    $("#dialog-confirm").html("Are you sure you want to delete this part (" + parttree.activeNode.key + ")?");
+
+    // Define the Dialog and its properties.
+    $("#dialog-confirm").dialog({
+        resizable: false,
+        modal: true,
+        title: "Delete Part",
+        height: 160,
+        width: 400,
+        buttons: {
+            "Yes": function () {
+                $(this).dialog('close');
+                window.location.href = "/robots/deletepart?partno=" + parttree.activeNode.key;
+            },
+            "No": function () {
+                $(this).dialog('close');
+            }
+        }
+    });    
+}
+
+function addAssembly() {
+    let abbrev = '';
+    while (true) {
+        abbrev = window.prompt('Enter Abbreviation For This Assembly (leave blank to inherit from parent)');
+        if (abbrev === null) {
+            return;
+        }
+
+        if (abbrev.length === 0 || /^[a-zA-Z]+$/.test(abbrev)) {
+            break;
+        }
+
+        alert('Abbreviations for assemblies must be all letters');
+    }
+    window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=A&abbrev=" + abbrev;    
+}
+
 document.addEventListener("DOMContentLoaded", (event) => {
     parttree = new mar10.Wunderbaum({
         id: "demo",
@@ -80,6 +152,74 @@ document.addEventListener("DOMContentLoaded", (event) => {
             e.titleSpan.title = e.node.data.desc;
         }
     });
+
+    $('#parttree').contextPopup({
+          title:'Parts Menu',
+            items: [
+                {
+                    label:'Edit Part',
+                    icon:'/nologin/images/edit.png',
+                    action:function() {
+                        let key = parttree.activeNode.key ;
+                        let ntype = parttree.activeNode.data.ntype ;
+                        window.location.href = "/robots/editpart?partno=" + key + "&parttype=" + ntype + "&retplace=/robots/viewrobot$$$ROBOTID$$$";
+                    }
+                },
+                {
+                    label: 'Drawings',
+                    icon:'/nologin/images/drawing.png',
+                    action:function() {             
+                        window.location.href = "/drawings/drawings?partno=" + parttree.activeNode.key ;
+                    }
+                },
+                {
+                    label:'Rename Assembly',
+                    icon:'/nologin/images/rename.png',
+                    action:function() { renameAssembly() ; },
+                    isEnabled: function() { return isCurrentPartAssembly() ; }
+
+                },
+                null,
+                {
+                    label:'Delete Part',
+                    icon:'/nologin/images/delete.png',
+                    action:function() { 
+                        deletePart() ;
+                    }                        
+                },
+                null,
+                {
+                    label:'Show Schedule',
+                    icon:'/nologin/images/schedule.png',
+                    action:function() {
+                        window.location.href = "/robots/partdisp?partno=" + parttree.activeNode.key ;
+                    }
+                },
+
+                null,
+                {
+                    label:'Add Assembly Part',
+                    icon:'/nologin/images/parta.png',
+                    action:function() {
+                        addAssembly() ;
+                    }
+                },
+                {
+                    label:'Add COTS Part',
+                    icon:'/nologin/images/partc.png',
+                    action:function() { 
+                        window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=C&abbrev=";
+                    },
+                },
+                {
+                    label:'Add Manufactured Part',
+                    icon:'/nologin/images/partm.png',
+                    action:function() {
+                        window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=M&abbrev=";
+                    }                        
+                },
+            ]
+        });
 });  
 
 document.onkeydown = function (e) {
