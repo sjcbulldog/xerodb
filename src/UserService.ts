@@ -88,6 +88,28 @@ export class UserService extends DatabaseService {
         });
     }
 
+    private delUserFromDb(u: User) {
+        let sql: string = 'DELETE FROM users ';
+        sql += 'WHERE id="' + u.id_ + '"';
+
+        xeroDBLoggerLog('DEBUG', 'renameUser: ' + sql);
+
+        this.db().exec(sql, (err) => {
+            if (err) {
+                xeroDBLoggerLog('ERROR', 'UserService: failed to delete user id "' + u.id_ + '" from the database - ' + err);
+                xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
+            }
+            else {
+                xeroDBLoggerLog('INFO', 'UserService: deleted user id "' + u.id_ + '" from the database');
+            }
+        });
+    }
+
+    private delUser(req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        let user = this.userFromId(+req.query.id) ;
+        if (user !== null)
+            this.delUserFromDb(user);
+    }
 
     private allUsers(): Object {
         let ret: Object[] = [];
@@ -480,6 +502,16 @@ export class UserService extends DatabaseService {
 
         return null;
     }
+
+    public userFromId(id: number): User | null {
+        for (let [key, user] of this.users_) {
+            if (user.id_ === id) {
+                return user;
+            }
+        }
+
+        return null;
+    }    
 
     public userFromEmail(email: string): User | null {
         for (let [key, user] of this.users_) {
@@ -881,7 +913,6 @@ export class UserService extends DatabaseService {
                     }
                     handled = true;
                 }
-
                 else if (req.path === '/users/editonedone') {
                     let result: Error | null = this.editOneDone(req);
                     if (result === null) {

@@ -12,7 +12,7 @@ function showAllUsers() {
         for(let user of data) {
             content += '<tr>'
             content += '<td>' ;
-            content += '<a title="Edit User" href=/users/editone?username='+user.username + '>' + user.username + '</td>'
+            content += '<a title="Edit User" href=/users/editone?username='+user.username + '>' + user.username + '</td>' ;
             content += '<td>' + user.firstname + '</td>' ;
             content += '<td>' + user.lastname + '</td>' ;
 
