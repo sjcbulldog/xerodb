@@ -153,6 +153,10 @@ document.addEventListener("DOMContentLoaded", (event) => {
         }
     });
 
+    function noPartAlert() {
+        alert("No part is selected.  Select a part from the tree view before using the menu") ;
+    }
+
     $('#parttree').contextPopup({
           title:'Parts Menu',
             items: [
@@ -160,6 +164,10 @@ document.addEventListener("DOMContentLoaded", (event) => {
                     label:'Edit Part',
                     icon:'/nologin/images/edit.png',
                     action:function() {
+                        if (parttree === null || parttree.activeNode === null) {
+                            noPartAlert() ;
+                            return ;
+                        }
                         let key = parttree.activeNode.key ;
                         let ntype = parttree.activeNode.data.ntype ;
                         window.location.href = "/robots/editpart?partno=" + key + "&parttype=" + ntype + "&retplace=/robots/viewrobot$$$ROBOTID$$$";
@@ -169,13 +177,23 @@ document.addEventListener("DOMContentLoaded", (event) => {
                     label: 'Drawings',
                     icon:'/nologin/images/drawing.png',
                     action:function() {             
+                        if (parttree === null || parttree.activeNode === null) {
+                            noPartAlert() ;
+                            return ;
+                        }                        
                         window.location.href = "/drawings/drawings?partno=" + parttree.activeNode.key ;
                     }
                 },
                 {
                     label:'Rename Assembly',
                     icon:'/nologin/images/rename.png',
-                    action:function() { renameAssembly() ; },
+                    action:function() { 
+                        if (parttree === null || parttree.activeNode === null) {
+                            noPartAlert() ;
+                            return ;
+                        }                        
+                        renameAssembly() ; 
+                    },
                     isEnabled: function() { return isCurrentPartAssembly() ; }
 
                 },
@@ -184,6 +202,10 @@ document.addEventListener("DOMContentLoaded", (event) => {
                     label:'Delete Part',
                     icon:'/nologin/images/delete.png',
                     action:function() { 
+                        if (parttree === null || parttree.activeNode === null) {
+                            noPartAlert() ;
+                            return ;
+                        }                        
                         deletePart() ;
                     }                        
                 },
@@ -192,6 +214,10 @@ document.addEventListener("DOMContentLoaded", (event) => {
                     label:'Show Schedule',
                     icon:'/nologin/images/schedule.png',
                     action:function() {
+                        if (parttree === null || parttree.activeNode === null) {
+                            noPartAlert() ;
+                            return ;
+                        }                        
                         window.location.href = "/robots/partdisp?partno=" + parttree.activeNode.key ;
                     }
                 },
@@ -201,6 +227,10 @@ document.addEventListener("DOMContentLoaded", (event) => {
                     label:'Add Assembly Part',
                     icon:'/nologin/images/parta.png',
                     action:function() {
+                        if (parttree === null || parttree.activeNode === null) {
+                            noPartAlert() ;
+                            return ;
+                        }                        
                         addAssembly() ;
                     }
                 },
@@ -208,6 +238,10 @@ document.addEventListener("DOMContentLoaded", (event) => {
                     label:'Add COTS Part',
                     icon:'/nologin/images/partc.png',
                     action:function() { 
+                        if (parttree === null || parttree.activeNode === null) {
+                            noPartAlert() ;
+                            return ;
+                        }                        
                         window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=C&abbrev=";
                     },
                 },
@@ -215,6 +249,10 @@ document.addEventListener("DOMContentLoaded", (event) => {
                     label:'Add Manufactured Part',
                     icon:'/nologin/images/partm.png',
                     action:function() {
+                        if (parttree === null || parttree.activeNode === null) {
+                            noPartAlert() ;
+                            return ;
+                        }                        
                         window.location.href = "/robots/newpart?parent=" + parttree.activeNode.key + "&type=M&abbrev=";
                     }                        
                 },
