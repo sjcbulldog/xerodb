@@ -420,8 +420,9 @@ export class DashboardService extends DatabaseService {
 
             let childs: LooseObject[] = [] ;
             for(let inst of value.instances_) {
+                let rex = /,/g;
                 let childobj : LooseObject = {
-                    title: inst.path_.toString().replace(',', '/'),
+                    title: inst.path_.toString().replace(rex, '/'),
                     quantity: '',
                     cost: '',
                 } ;
