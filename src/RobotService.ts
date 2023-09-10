@@ -1428,6 +1428,28 @@ export class RobotService extends DatabaseService {
         res.redirect(url);
     }
 
+    private async showrobotbypart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        if (req.query.partno === undefined) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/showrobotbypart - missing query parameters'));
+            return;
+        }
+
+        let partno: PartNumber | null = PartNumber.fromString(req.query.partno) ;
+        if (partno === null) {
+            res.send(createMessageHtml('Error', 'invalid ROBOT api REST request /robots/showrobotbypart - invalid part number'));
+            return;
+        }
+
+        let part: RobotPart | null = await this.getOnePart(partno);
+        if (part === null) {
+            res.send(createMessageHtml('Error', 'invalid api REST request /robots/showrobotbypart - invalid part number'));
+            return;
+        }
+
+        let url: string = '/robots/viewrobot?robotid=' + part.part_.robot_ ;
+        res.redirect(url) ;
+    }
+
     private async deletepart(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
         if (req.query.partno === undefined) {
             res.send(createMessageHtml('Error', 'invalid api REST request /robots/deletepart - missing query parameters'));
@@ -1837,6 +1859,10 @@ export class RobotService extends DatabaseService {
         else if (req.path === '/robots/editpartdone') {
             this.editpartdone(u, req, res);
             handled = true;
+        }
+        else if (req.path === '/robots/showrobotbypart') {
+            this.showrobotbypart(u, req, res) ;
+            handled = true ;
         }
         else if (req.path === '/robots/deletepart') {
             this.deletepart(u, req, res);

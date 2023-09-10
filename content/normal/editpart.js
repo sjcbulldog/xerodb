@@ -1,6 +1,11 @@
 var oldstate = undefined ;
 var olddate = undefined ;
 
+function backToRobotPage() {
+    $('editpartform').submit(function(e){ e.preventDefault(); });
+    window.location.href="/robots/showrobotbypart?partno=" + partnovalue ;
+}
+
 function addOneSelect(attr, lastone, choices, value) {
     var parent = lastone.parentElement;
 

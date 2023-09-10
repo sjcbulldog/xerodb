@@ -612,6 +612,22 @@ export class UserService extends DatabaseService {
         return rolesstr.split(',');
     }
 
+    private isDigit(ch: string ) : boolean {
+        return ch.length === 1 && ch >= '0' && ch <= '9' ;
+    }
+
+    private isAlpha(ch: string) : boolean {
+        return ch.length === 1 && ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) ;
+    }
+
+    private isValidUserName(uname: string) : boolean {
+        for(let ch of uname) {
+            if (!this.isDigit(ch) && !this.isAlpha(ch) && ch !== '_' && ch != '.')
+                return false ;
+        }
+        return true ;
+    }
+
     public addUser(username: string, password: string, lastname: string, firstname: string, email: string, state: string | null, roles: string[]): Error | null {
         let ret: Error | null = null;
 
@@ -620,6 +636,9 @@ export class UserService extends DatabaseService {
         }
         else if (this.userFromEmail(email) !== null) {
             ret = new Error("An account with the email '" + email + "' already exists");
+        }
+        else if (!this.isValidUserName(username)) {
+            ret = new Error("The username '" + username + "' is not valid.  You can only use letters, numbers, period, or underscore");
         }
         else {
             let rolestr: string = this.rolesToRolesString(roles);
