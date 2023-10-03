@@ -1,32 +1,32 @@
 function showAllUsers() {
-    $.getJSON('/users/allusers', (data) => {
-        var content = '<table>' ;
-        content += '<tr>' ;
-        content += '<td><b>Username</b></td>' ;
-        content += '<td><b>Last Name</b></td>' ;
-        content += '<td><b>First Name</b></td>' ;
-        content += '<td><b>Roles</b></td>'
-        content += '<td><b>State</b></td>' ;
-        content += '</tr>' ;
-
-        for(let user of data) {
-            content += '<tr>'
-            content += '<td>' ;
-            content += '<a title="Edit User" href=/users/editone?username='+user.username + '>' + user.username + '</td>' ;
-            content += '<td>' + user.firstname + '</td>' ;
-            content += '<td>' + user.lastname + '</td>' ;
-
-            let str = "" ;
-            for(let role of user.roles) {
-                str += role + ' ' ;
+    parttree = new mar10.Wunderbaum({
+        id: "partreport",
+        debugLevel: 1,
+        element: document.getElementById("users"),
+        source: {
+            url: "/users/allusers"
+        },
+        columns: [
+            { id: "*", title: "User Name", width: "160px" },
+            { id: "firstname", title: "First Name", width: "120px" },
+            { id: "lastname", title: "Last Name", width: "120px" },
+            { id: "rolestr", title: "Roles", width: "120px" },
+            { id: "state", title: "State", width: "80px" },
+            { id: "email", title: "Email"}
+        ],
+        render: function (e) {
+            const node = e.node;
+            node.tooltip = node.data.desc;
+            for (const col of Object.values(e.renderColInfosById)) {
+                col.elem.textContent = node.data[col.id];
             }
-            content += '<td>' + str + '</td>' ;
-            content += '<td>' + user.state + '</td>' ;
-            content += '</tr>'
-        }
-        content += '</table>';
-        $('.table').append(content) ;
-    }) ;
+        },
+        dblclick: function (e) {
+            let username = parttree.activeNode.data.username ;
+            let url = "/users/editone?username=" + username ;
+            window.location.href = url ;
+        },
+    });
 }
 
 $(document).ready(showAllUsers);

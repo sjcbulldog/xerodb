@@ -116,12 +116,22 @@ export class UserService extends DatabaseService {
 
         for (let [key, user] of this.users_) {
             let nuser: LooseObject = {};
+            nuser['title'] = user.username_ ;
             nuser['email'] = user.email_;
             nuser['username'] = user.username_;
             nuser['lastname'] = user.lastname_;
             nuser['firstname'] = user.firstname_;
             nuser['state'] = user.state_;
             nuser['roles'] = user.roles_;
+
+            nuser['rolestr'] = '' ;
+            for(let role of user.roles_) {
+                if (nuser['rolestr'].length > 0) {
+                    nuser['rolestr'] += ',' ;
+                }
+
+                nuser['rolestr'] += role;
+            }
             ret.push(nuser);
         }
 
