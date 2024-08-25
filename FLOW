@@ -1,0 +1,31 @@
+Assembly Part Type
+------------------
+unassigned
+assigned (assigned to a student and mentor)
+waiting for parts (waiting for all child parts to be ready)
+ready for assembly
+in assembly
+ready for mentor check
+done
+
+COTS Part Type
+--------------
+unassigned
+assigned (assigned to a student and mentor)
+ready to order (mentor)
+ordered
+done
+
+Manufactured Part Type
+---------------------
+unassigned
+assigned (assigned to a student and mentor)
+ready for CAD
+in CAD
+ready for drawing check (mentor)
+ready for CAM
+in CAM
+ready for build
+in build
+ready for build check
+done

@@ -50,6 +50,17 @@ function createNotifiyCell(notify, partno) {
     return td ;
 }
 
+function createDeleteCell(partno) {
+    let td = document.createElement('td') ;
+    let link = document.createElement('a') ;
+    link.href = "/robots/delete?id=" + partno ;
+    td.appendChild(link) ;
+    let par = document.createElement('p') ;
+    link.appendChild(par) ;
+    par.innerHTML = "delete" ;
+    return td ;
+}
+
 function showAllRobots() {
     $.getJSON('/robots/listall', (data) => {
         let table = document.createElement('table') ;
@@ -62,6 +73,7 @@ function showAllRobots() {
         tr.appendChild(createCell('Created', true)) ;
         tr.appendChild(createCell('Last Modified', true)) ;
         tr.appendChild(createCell('Notifications', true)) ;
+        tr.appendChild(createCell('Delete', true)) ;
 
         for(let robot of data) {
             tr = document.createElement('tr');
@@ -71,7 +83,8 @@ function showAllRobots() {
             tr.appendChild(createCell(robot.creator));
             tr.appendChild(createCell(robot.created));
             tr.appendChild(createCell(robot.modified));
-            tr.appendChild(createNotifiyCell(robot.notify, robot.part));
+            tr.appendChild(createNotifiyCell(robot.notify, robot.id));
+            tr.appendChild(createDeleteCell(robot.id)) ;
         }
 
 
