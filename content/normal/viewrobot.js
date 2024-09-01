@@ -100,7 +100,8 @@ document.addEventListener("DOMContentLoaded", (event) => {
             { id: "ntype", title: "Type", width: "110px" },
             { id: "quantity", title: "Quantity", width: "70px" },
             { id: "state", title: "State", width: "140px" },
-            { id: "desc", title: "Description", /* width: "400px" */ },
+            { id: "locaction", title: "Location", width: "200px"},
+            { id: "desc", title: "Description"},
         ],
         load: function (e) {
             e.tree.expandAll();

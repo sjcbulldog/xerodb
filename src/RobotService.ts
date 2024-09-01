@@ -28,6 +28,7 @@ interface LooseObject {
 export class RobotService extends DatabaseService {
     public static readonly robotFileName: string = 'robot.db';
     private static readonly doubleClickMessage = 'Double Click To Edit' ;
+    public static readonly schemaVersion = 2 ;
 
     private parttypes_: Map<string, PartType> = new Map<string, PartType>() ;
 
@@ -38,7 +39,7 @@ export class RobotService extends DatabaseService {
     private audit_: AuditService;
 
     constructor(rootdir: string, users: UserService, audit: AuditService) {
-        super('RobotService', path.join(rootdir, RobotService.robotFileName));
+        super('RobotService', path.join(rootdir, RobotService.robotFileName), RobotService.schemaVersion, rootdir);
 
         let pt: PartType ;
 
@@ -57,6 +58,24 @@ export class RobotService extends DatabaseService {
 
         this.loadAll() ;
     }
+
+    private migrateV1toV2() {
+        let sql: string = 'ALTER TABLE parts ADD COLUMN location char(128) DEFAULT \'\';' ;
+        this.db().exec(sql, (err) => {
+            if (err) {
+                let msg: string = this.name() + ": cannot migrate table 'robots' in RobotService from V1 to V2" ;
+                xeroDBLoggerLog('ERROR', msg);
+                throw new Error(msg)
+            }
+            else {
+                this.updateSchemaVersion(2) ;
+            }
+        });
+    }
+
+    protected migrateTables(oldver: number, newver: number): void {
+        this.migrateV1toV2() ;
+    }    
 
     protected createTables() {
         let sql =
@@ -95,6 +114,7 @@ export class RobotService extends DatabaseService {
                 donedate text not null,
                 nextdate text not null,
                 notes text,
+                location text,
                 attribs text);
         ` ;
 
@@ -156,8 +176,11 @@ export class RobotService extends DatabaseService {
                     partnos.push(oneno);
                 }
 
-                let r: Robot = new Robot(id, name as string, desc as string, partnos, username as string, created as string, modified as string);
-                this.robots_.set(id, r);
+                let rname: string = name as string ;
+                if (!rname.startsWith('-')) {
+                    let r: Robot = new Robot(id, rname, desc as string, partnos, username as string, created as string, modified as string);
+                    this.robots_.set(id, r);
+                }
 
                 if (this.nextkey_ < id + 1) {
                     this.nextkey_ = id + 1;
@@ -400,6 +423,22 @@ export class RobotService extends DatabaseService {
         });
     }
 
+    private async updateRobotName(id: number) {
+        let robot: Robot | undefined = this.robots_.get(id);
+        if (robot)
+        {
+            let sql: string = 'UPDATE robots SET';
+            sql += " name = '" + this.escapeString(robot.name_) + "'";
+            sql += " WHERE id=" + id ;
+            this.db().exec(sql, (err) => {
+                if (err) {
+                    xeroDBLoggerLog('ERROR', 'RobotService: failed to update robot modified time, robot = "' + String(robot) + '" - ' + err);
+                    xeroDBLoggerLog('DEBUG', 'sql: "' + sql + '"');
+                }
+            });            
+        }
+    }
+
     private async isNotify(u: string, robot: number) : Promise<boolean> {
         let ret: Promise<boolean> = new Promise<boolean>(async (resolve, reject) => {
             let sql = 'select username, robot from notification where robot=' + String(robot) ;
@@ -486,6 +525,7 @@ export class RobotService extends DatabaseService {
 
         let sql: string = 'UPDATE parts SET';
         sql += " desc='" + part.description_ + "',";
+        sql += " location='" + this.escapeString(part.location_) + "'," ;
         sql += " quantity=" + String(part.quantity_) + ",";
         sql += " student='" + this.escapeString(part.student_) + "',"
         sql += " mentor='" + this.escapeString(part.mentor_) + "',"
@@ -527,31 +567,35 @@ export class RobotService extends DatabaseService {
         return ret;
     }
 
-    private async createNewPart(u: User, parent: PartNumber | null, partno: PartNumber, quantity: number, state: string, type: string, desc: string, 
+    private async createNewPart(u: User, parent: PartNumber | null, partno: PartNumber, quantity: number, state: string, type: string, loc: string, desc: string, 
                                     attribs: Map<string, string>, student: string, mentor: string): Promise<void> {
         let sql = 'INSERT INTO parts VALUES (';
+
+        // parent
         if (parent === null) {
             sql += "null," ;
         }
         else {
             sql += "'" + parent.toString() + "',";
         }
-        sql += "'" + partno.toString() + "',";
-        sql += "'" + state + "'," ;
-        sql += "'" + student + "'," ;
-        sql += "'" + mentor + "'," ;
-        sql += quantity + ",";
-        sql += "'" + this.escapeString(desc) + "',";
-        sql += "'" + type + "',";
-        sql += "'" + u.username_ + "',";
-        sql += "'" + this.now() + "',";
-        sql += "'" + this.now() + "',";
-        sql += "'',";
-        sql += "'',";
-        sql += "'',";
-        sql += "'',";
+        sql += "'" + partno.toString() + "',";                                          // partno
+        sql += "'" + state + "'," ;                                                     // state
+        sql += "'" + student + "'," ;                                                   // student
+        sql += "'" + mentor + "'," ;                                                    // mentor
+        sql += quantity + ",";                                                          // quantity
+        sql += "'" + this.escapeString(desc) + "',";                                    // description
+        sql += "'" + type + "',";                                                       // type
+        sql += "'" + u.username_ + "',";                                                // username (who created it)
+        sql += "'" + this.now() + "',";                                                 // when was it created
+        sql += "'" + this.now() + "',";                                                 // when was it last modified
+        sql += "'',";                                                                   // files (drawings)
+        sql += "'',";                                                                   // links (drawings)
+        sql += "'',";                                                                   // done date?
+        sql += "'',";                                                                   // next state date?
         sql += "'',";                                                                   // Notes
-        sql += "'" + this.escapeString(this.attribMapToString(attribs)) + "')";
+        sql += "'" + this.escapeString(this.attribMapToString(attribs)) + "'," ;         // Attributes
+        sql += "'" + this.escapeString(loc) + "'" ;
+        sql += ") ;" ;
 
         let ret: Promise<void> = new Promise<void>(async (resolve, reject) => {
             try {
@@ -670,6 +714,7 @@ export class RobotService extends DatabaseService {
         const studentKey = 'student' as ObjectKey ;
         const mentorKey = 'mentor' as ObjectKey ;
         const quantityKey = 'quantity' as ObjectKey;
+        const locKey = 'location' as ObjectKey ;
         const descKey = 'desc' as ObjectKey;
         const typeKey = 'type' as ObjectKey;
         const usernameKey = 'username' as ObjectKey;
@@ -688,6 +733,7 @@ export class RobotService extends DatabaseService {
         let student = (obj[studentKey] as unknown) as string ;
         let mentor = (obj[mentorKey] as unknown) as string ;
         let quantity = (obj[quantityKey] as unknown) as number;
+        let loc = (obj[locKey] as unknown) as string ;
         let desc = (obj[descKey] as unknown) as string;
         let type = (obj[typeKey] as unknown) as string;
         let username = (obj[usernameKey] as unknown) as string;
@@ -728,7 +774,7 @@ export class RobotService extends DatabaseService {
 
         let filelist : string [] = unpackFiles(files) ;
         let linklist : string [] = unpackLinks(links) ;
-        let retval: RobotPart = new RobotPart(parentNum!, partNum!, state, quantity, desc, type, username, created, 
+        let retval: RobotPart = new RobotPart(parentNum!, partNum!, state, quantity, loc, desc, type, username, created, 
                                     modified, mentor, student, filelist, linklist, donedate, nextdate, attrlist);
         retval.notes_ = notes ;
         this.applyAttributes(retval);
@@ -739,7 +785,7 @@ export class RobotService extends DatabaseService {
     private async getOnePart(partno: PartNumber): Promise<RobotPart | null> {
         let ret: Promise<RobotPart | null > = new Promise<RobotPart | null>((resolve, reject) => {
             let retval: RobotPart | null;
-            let sql = "select parent, partno, state, student, mentor, quantity, desc, type, username, created, modified, files, links, donedate, nextdate, notes, attribs from parts where partno='" + partno + "'" ;
+            let sql = "select parent, partno, state, student, mentor, quantity, desc, type, username, created, modified, files, links, donedate, nextdate, notes, attribs, location from parts where partno='" + partno + "'" ;
             this.db().all(sql, async (err, rows) => {
                 if (rows.length === 0) {
                     reject(new Error('no such record found'));
@@ -871,6 +917,7 @@ export class RobotService extends DatabaseService {
         ret['icon'] = icon;
         ret['ntype'] = ntype;
         ret['desc'] = part.description_;
+        ret['location'] = part.location_ ;
         ret['creator'] = part.username_;
         ret['modified'] = part.modified_;
         ret['quantity'] = part.quantity_;
@@ -1012,7 +1059,7 @@ export class RobotService extends DatabaseService {
             if (part.student_.length > 0 && part.mentor_.length > 0) {
                 st = PartType.stateAssigned ;
             }
-            await this.createNewPart(u, parent, newpartno, part.quantity_, st, part.type_, part.description_, 
+            await this.createNewPart(u, parent, newpartno, part.quantity_, st, part.type_, part.location_, part.description_, 
                                     this.copyAttributes(part.attribs_), part.student_, part.mentor_);
 
             //
@@ -1156,8 +1203,8 @@ export class RobotService extends DatabaseService {
         let comppart: PartNumber = await this.getNextPartNumber(new PartNumber(robotno, 'COMP', 0)) ;
         let pracpart: PartNumber = await this.getNextPartNumber(new PartNumber(robotno, 'PRAC', 0)) ;
         // TODO: fix this
-        await this.createNewPart(u, null, comppart, 1, PartType.stateUnassigned, 'A', "Competition Robot Top Assembly", attribs, '', '');
-        await this.createNewPart(u, null, pracpart, 1, PartType.stateUnassigned, 'A', "Practice Robot Top Assembly", attribs, '', '');
+        await this.createNewPart(u, null, comppart, 1, PartType.stateUnassigned, 'A', '', "Competition Robot Top Assembly", attribs, '', '');
+        await this.createNewPart(u, null, pracpart, 1, PartType.stateUnassigned, 'A', '', "Practice Robot Top Assembly", attribs, '', '');
 
         let current = this.now();
 
@@ -1204,6 +1251,19 @@ export class RobotService extends DatabaseService {
         }
 
         res.json(ret);
+    }
+
+    private async deleterobot(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
+        let rid: number = parseInt(req.query.id, 10) ;
+        let robot: Robot | undefined = this.robots_.get(rid) ;
+        if (robot) {
+            if (!robot.name_.startsWith('-')) {
+                robot.name_ = '-' + robot.name_ ;
+                this.updateRobotName(robot.id_) ;
+                this.robots_.delete(rid) ;
+            }
+        }
+        res.redirect('/normal/robots.html');
     }
 
     private async viewrobot(u: User, req: Request<{}, any, any, any, Record<string, any>>, res: Response<any, Record<string, any>>) {
@@ -1343,7 +1403,7 @@ export class RobotService extends DatabaseService {
         if (req.query.abbrev && req.query.abbrev.length > 0)
             abbrev = req.query.abbrev ;
         let newpartno: PartNumber = await this.getNextPartNumber(new PartNumber(parent.robot_, abbrev, 0)) ;
-        await this.createNewPart(u, parent, newpartno, 1, PartType.stateUnassigned, type, RobotService.doubleClickMessage, attribs, '', '') ;
+        await this.createNewPart(u, parent, newpartno, 1, PartType.stateUnassigned, type, '', RobotService.doubleClickMessage, attribs, '', '') ;
 
         let url: string = '/robots/viewrobot?robotid=' + parent.robot_ ;
         res.redirect(url);
@@ -1396,6 +1456,9 @@ export class RobotService extends DatabaseService {
 
         if (req.body.state)
             part.state_ = req.body.state ;
+
+        if (req.body.location)
+            part.location_ = req.body.location ;
 
         part.description_ = req.body.desc;
         part.quantity_ = parseInt(req.body.quantity, 10);
@@ -1830,6 +1893,10 @@ export class RobotService extends DatabaseService {
 
         if (req.path === '/robots/listall') {
             this.listall(u, req, res);
+            handled = true;
+        }
+        if (req.path === '/robots/delete') {
+            this.deleterobot(u, req, res);
             handled = true;
         }
         else if (req.path === '/robots/viewrobot') {

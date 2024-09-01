@@ -8,6 +8,7 @@ export class RobotPart {
     student_ : string ;
     mentor_: string ;
     quantity_ : number ;
+    location_: string ;
     description_ : string ;
     type_ : string;
     username_ : string;
@@ -21,13 +22,14 @@ export class RobotPart {
     drawings_: PartDrawing[] ;
     attribs_ : Map<string, string> ;
 
-    constructor(parent: PartNumber | null, num: PartNumber, state: string, quantity: number, desc: string, 
+    constructor(parent: PartNumber | null, num: PartNumber, state: string, quantity: number, loc: string, desc: string, 
                 type: string, uname: string, created: string, modified: string, mentor: string, student: string,
                 files: string[], links: string[], donedate: string, nextdate: string, attribs: Map<string, string>) {
         this.parent_ = parent ;
         this.part_ = num ;
         this.state_ = state ;
         this.quantity_ = quantity ;
+        this.location_ = loc ;
         this.description_ = desc ;
         this.type_ = type ;
         this.username_ = uname ;
@@ -82,7 +84,7 @@ export class RobotPart {
     }
 
     public clone() : RobotPart {
-        let ret: RobotPart = new RobotPart(this.parent_, this.part_, this.state_, this.quantity_, this.description_, 
+        let ret: RobotPart = new RobotPart(this.parent_, this.part_, this.state_, this.quantity_, this.location_, this.description_, 
                                     this.type_, this.username_, this.created_, this.modified_, 
                                     this.mentor_, this.student_, this.files_, this.links_, this.donedate_, 
                                     this.nextdate_, this.cloneAttribs());

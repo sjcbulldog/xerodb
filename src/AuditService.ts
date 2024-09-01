@@ -20,8 +20,14 @@ export class AuditService extends DatabaseService {
     public static readonly IncorrectPasswordError = "USER_SERVICE_INCORRECT_PASSWORD";
     public static readonly UserNotActiveError = "USER_SERVICE_USER_NOT_ACTIVE";
 
+    public static readonly schemaVersion = 1 ;
+
     constructor(rootdir: string) {
-        super('audit', path.join(rootdir, AuditService.userFileName)) ;
+        super('audit', path.join(rootdir, AuditService.userFileName), AuditService.schemaVersion, rootdir) ;
+    }
+
+    protected migrateTables(oldver: number, newver: number): void {
+        throw new Error("no new schema version available") ;
     }
 
     protected createTables() {

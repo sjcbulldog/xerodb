@@ -1,7 +1,294 @@
 /*!
+ * debounce & throttle, taken from https://github.com/lodash/lodash v4.17.21
+ * MIT License: https://raw.githubusercontent.com/lodash/lodash/4.17.21-npm/LICENSE
+ * Modified for TypeScript type annotations.
+ */
+/* --- */
+/** Detect free variable `global` from Node.js. */
+const freeGlobal = typeof global === "object" &&
+    global !== null &&
+    global.Object === Object &&
+    global;
+/** Detect free variable `globalThis` */
+const freeGlobalThis = typeof globalThis === "object" &&
+    globalThis !== null &&
+    globalThis.Object == Object &&
+    globalThis;
+/** Detect free variable `self`. */
+const freeSelf = typeof self === "object" && self !== null && self.Object === Object && self;
+/** Used as a reference to the global object. */
+const root = freeGlobalThis || freeGlobal || freeSelf || Function("return this")();
+/**
+ * Checks if `value` is the
+ * [language type](http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-types)
+ * of `Object`. (e.g. arrays, functions, objects, regexes, `new Number(0)`, and `new String('')`)
+ *
+ * @since 0.1.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is an object, else `false`.
+ * @example
+ *
+ * isObject({})
+ * // => true
+ *
+ * isObject([1, 2, 3])
+ * // => true
+ *
+ * isObject(Function)
+ * // => true
+ *
+ * isObject(null)
+ * // => false
+ */
+function isObject(value) {
+    const type = typeof value;
+    return value != null && (type === "object" || type === "function");
+}
+/**
+ * Creates a debounced function that delays invoking `func` until after `wait`
+ * milliseconds have elapsed since the last time the debounced function was
+ * invoked, or until the next browser frame is drawn. The debounced function
+ * comes with a `cancel` method to cancel delayed `func` invocations and a
+ * `flush` method to immediately invoke them. Provide `options` to indicate
+ * whether `func` should be invoked on the leading and/or trailing edge of the
+ * `wait` timeout. The `func` is invoked with the last arguments provided to the
+ * debounced function. Subsequent calls to the debounced function return the
+ * result of the last `func` invocation.
+ *
+ * **Note:** If `leading` and `trailing` options are `true`, `func` is
+ * invoked on the trailing edge of the timeout only if the debounced function
+ * is invoked more than once during the `wait` timeout.
+ *
+ * If `wait` is `0` and `leading` is `false`, `func` invocation is deferred
+ * until the next tick, similar to `setTimeout` with a timeout of `0`.
+ *
+ * If `wait` is omitted in an environment with `requestAnimationFrame`, `func`
+ * invocation will be deferred until the next frame is drawn (typically about
+ * 16ms).
+ *
+ * See [David Corbacho's article](https://css-tricks.com/debouncing-throttling-explained-examples/)
+ * for details over the differences between `debounce` and `throttle`.
+ *
+ * @since 0.1.0
+ * @category Function
+ * @param {Function} func The function to debounce.
+ * @param {number} [wait=0]
+ *  The number of milliseconds to delay; if omitted, `requestAnimationFrame` is
+ *  used (if available).
+ * @param [options={}] The options object.
+ * @returns {Function} Returns the new debounced function.
+ * @example
+ *
+ * // Avoid costly calculations while the window size is in flux.
+ * jQuery(window).on('resize', debounce(calculateLayout, 150))
+ *
+ * // Invoke `sendMail` when clicked, debouncing subsequent calls.
+ * jQuery(element).on('click', debounce(sendMail, 300, {
+ *   'leading': true,
+ *   'trailing': false
+ * }))
+ *
+ * // Ensure `batchLog` is invoked once after 1 second of debounced calls.
+ * const debounced = debounce(batchLog, 250, { 'maxWait': 1000 })
+ * const source = new EventSource('/stream')
+ * jQuery(source).on('message', debounced)
+ *
+ * // Cancel the trailing debounced invocation.
+ * jQuery(window).on('popstate', debounced.cancel)
+ *
+ * // Check for pending invocations.
+ * const status = debounced.pending() ? "Pending..." : "Ready"
+ */
+function debounce(func, wait = 0, options = {}) {
+    let lastArgs, lastThis, maxWait, result, timerId, lastCallTime;
+    let lastInvokeTime = 0;
+    let leading = false;
+    let maxing = false;
+    let trailing = true;
+    // Bypass `requestAnimationFrame` by explicitly setting `wait=0`.
+    const useRAF = !wait && wait !== 0 && typeof root.requestAnimationFrame === "function";
+    if (typeof func !== "function") {
+        throw new TypeError("Expected a function");
+    }
+    wait = +wait || 0;
+    if (isObject(options)) {
+        leading = !!options.leading;
+        maxing = "maxWait" in options;
+        maxWait = maxing ? Math.max(+options.maxWait || 0, wait) : maxWait;
+        trailing = "trailing" in options ? !!options.trailing : trailing;
+    }
+    function invokeFunc(time) {
+        const args = lastArgs;
+        const thisArg = lastThis;
+        lastArgs = lastThis = undefined;
+        lastInvokeTime = time;
+        result = func.apply(thisArg, args);
+        return result;
+    }
+    function startTimer(pendingFunc, wait) {
+        if (useRAF) {
+            root.cancelAnimationFrame(timerId);
+            return root.requestAnimationFrame(pendingFunc);
+        }
+        return setTimeout(pendingFunc, wait);
+    }
+    function cancelTimer(id) {
+        if (useRAF) {
+            return root.cancelAnimationFrame(id);
+        }
+        clearTimeout(id);
+    }
+    function leadingEdge(time) {
+        // Reset any `maxWait` timer.
+        lastInvokeTime = time;
+        // Start the timer for the trailing edge.
+        timerId = startTimer(timerExpired, wait);
+        // Invoke the leading edge.
+        return leading ? invokeFunc(time) : result;
+    }
+    function remainingWait(time) {
+        const timeSinceLastCall = time - lastCallTime;
+        const timeSinceLastInvoke = time - lastInvokeTime;
+        const timeWaiting = wait - timeSinceLastCall;
+        return maxing
+            ? Math.min(timeWaiting, maxWait - timeSinceLastInvoke)
+            : timeWaiting;
+    }
+    function shouldInvoke(time) {
+        const timeSinceLastCall = time - lastCallTime;
+        const timeSinceLastInvoke = time - lastInvokeTime;
+        // Either this is the first call, activity has stopped and we're at the
+        // trailing edge, the system time has gone backwards and we're treating
+        // it as the trailing edge, or we've hit the `maxWait` limit.
+        return (lastCallTime === undefined ||
+            timeSinceLastCall >= wait ||
+            timeSinceLastCall < 0 ||
+            (maxing && timeSinceLastInvoke >= maxWait));
+    }
+    function timerExpired() {
+        const time = Date.now();
+        if (shouldInvoke(time)) {
+            return trailingEdge(time);
+        }
+        // Restart the timer.
+        timerId = startTimer(timerExpired, remainingWait(time));
+    }
+    function trailingEdge(time) {
+        timerId = undefined;
+        // Only invoke if we have `lastArgs` which means `func` has been
+        // debounced at least once.
+        if (trailing && lastArgs) {
+            return invokeFunc(time);
+        }
+        lastArgs = lastThis = undefined;
+        return result;
+    }
+    function cancel() {
+        if (timerId !== undefined) {
+            cancelTimer(timerId);
+        }
+        lastInvokeTime = 0;
+        lastArgs = lastCallTime = lastThis = timerId = undefined;
+    }
+    function flush() {
+        return timerId === undefined ? result : trailingEdge(Date.now());
+    }
+    function pending() {
+        return timerId !== undefined;
+    }
+    function debounced(...args) {
+        const time = Date.now();
+        const isInvoking = shouldInvoke(time);
+        lastArgs = args;
+        // eslint-disable-next-line  @typescript-eslint/no-this-alias
+        lastThis = this;
+        lastCallTime = time;
+        if (isInvoking) {
+            if (timerId === undefined) {
+                return leadingEdge(lastCallTime);
+            }
+            if (maxing) {
+                // Handle invocations in a tight loop.
+                timerId = startTimer(timerExpired, wait);
+                return invokeFunc(lastCallTime);
+            }
+        }
+        if (timerId === undefined) {
+            timerId = startTimer(timerExpired, wait);
+        }
+        return result;
+    }
+    debounced.cancel = cancel;
+    debounced.flush = flush;
+    debounced.pending = pending;
+    return debounced;
+}
+/**
+ * Creates a throttled function that only invokes `func` at most once per
+ * every `wait` milliseconds (or once per browser frame). The throttled function
+ * comes with a `cancel` method to cancel delayed `func` invocations and a
+ * `flush` method to immediately invoke them. Provide `options` to indicate
+ * whether `func` should be invoked on the leading and/or trailing edge of the
+ * `wait` timeout. The `func` is invoked with the last arguments provided to the
+ * throttled function. Subsequent calls to the throttled function return the
+ * result of the last `func` invocation.
+ *
+ * **Note:** If `leading` and `trailing` options are `true`, `func` is
+ * invoked on the trailing edge of the timeout only if the throttled function
+ * is invoked more than once during the `wait` timeout.
+ *
+ * If `wait` is `0` and `leading` is `false`, `func` invocation is deferred
+ * until the next tick, similar to `setTimeout` with a timeout of `0`.
+ *
+ * If `wait` is omitted in an environment with `requestAnimationFrame`, `func`
+ * invocation will be deferred until the next frame is drawn (typically about
+ * 16ms).
+ *
+ * See [David Corbacho's article](https://css-tricks.com/debouncing-throttling-explained-examples/)
+ * for details over the differences between `throttle` and `debounce`.
+ *
+ * @since 0.1.0
+ * @category Function
+ * @param {Function} func The function to throttle.
+ * @param {number} [wait=0]
+ *  The number of milliseconds to throttle invocations to; if omitted,
+ *  `requestAnimationFrame` is used (if available).
+ * @param [options={}] The options object.
+ * @returns {Function} Returns the new throttled function.
+ * @example
+ *
+ * // Avoid excessively updating the position while scrolling.
+ * jQuery(window).on('scroll', throttle(updatePosition, 100))
+ *
+ * // Invoke `renewToken` when the click event is fired, but not more than once every 5 minutes.
+ * const throttled = throttle(renewToken, 300000, { 'trailing': false })
+ * jQuery(element).on('click', throttled)
+ *
+ * // Cancel the trailing throttled invocation.
+ * jQuery(window).on('popstate', throttled.cancel)
+ */
+function throttle(func, wait = 0, options = {}) {
+    let leading = true;
+    let trailing = true;
+    if (typeof func !== "function") {
+        throw new TypeError("Expected a function");
+    }
+    if (isObject(options)) {
+        leading = "leading" in options ? !!options.leading : leading;
+        trailing = "trailing" in options ? !!options.trailing : trailing;
+    }
+    return debounce(func, wait, {
+        leading,
+        trailing,
+        maxWait: wait,
+    });
+}
+
+/*!
  * Wunderbaum - util
- * Copyright (c) 2021-2023, Martin Wendt. Released under the MIT license.
- * v0.4.0, Wed, 06 Sep 2023 08:21:56 GMT (https://github.com/mar10/wunderbaum)
+ * Copyright (c) 2021-2024, Martin Wendt. Released under the MIT license.
+ * v0.11.0, Sun, 04 Aug 2024 15:35:53 GMT (https://github.com/mar10/wunderbaum)
  */
 /** @module util */
 /** Readable names for `MouseEvent.button` */
@@ -27,8 +314,21 @@ const ENTITY_MAP = {
     "'": "&#39;",
     "/": "&#x2F;",
 };
+/** A generic error that can be thrown to indicate a validation error when
+ * handling the `apply` event for a node title or the `change` event for a
+ * grid cell.
+ */
+class ValidationError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "ValidationError";
+    }
+}
 /**
  * A ES6 Promise, that exposes the resolve()/reject() methods.
+ *
+ * TODO: See [Promise.withResolvers()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/withResolvers#description)
+ * , a proposed standard, but not yet implemented in any browser.
  */
 let Deferred$1 = class Deferred {
     constructor() {
@@ -111,7 +411,7 @@ function documentReadyPromise() {
  * Iterate over Object properties or array elements.
  *
  * @param obj `Object`, `Array` or null
- * @param callback(index, item) called for every item.
+ * @param callback called for every item.
  *  `this` also contains the item.
  *  Return `false` to stop the iteration.
  */
@@ -120,7 +420,8 @@ function each(obj, callback) {
         // accept `null` or `undefined`
         return obj;
     }
-    let length = obj.length, i = 0;
+    const length = obj.length;
+    let i = 0;
     if (typeof length === "number") {
         for (; i < length; i++) {
             if (callback.call(obj[i], i, obj[i]) === false) {
@@ -129,7 +430,7 @@ function each(obj, callback) {
         }
     }
     else {
-        for (let k in obj) {
+        for (const k in obj) {
             if (callback.call(obj[i], k, obj[k]) === false) {
                 break;
             }
@@ -229,9 +530,11 @@ function getValueFromElem(elem, coerce = false) {
                 value = input.valueAsNumber;
                 break;
             case "radio":
-                const name = input.name;
-                const checked = input.parentElement.querySelector(`input[name="${name}"]:checked`);
-                value = checked ? checked.value : undefined;
+                {
+                    const name = input.name;
+                    const checked = input.parentElement.querySelector(`input[name="${name}"]:checked`);
+                    value = checked ? checked.value : undefined;
+                }
                 break;
             case "text":
             default:
@@ -368,16 +671,18 @@ function elemFromSelector(obj) {
     }
     return obj;
 }
-/** Return a EventTarget from selector or cast an existing element. */
-function eventTargetFromSelector(obj) {
-    if (!obj) {
-        return null;
-    }
-    if (typeof obj === "string") {
-        return document.querySelector(obj);
-    }
-    return obj;
-}
+// /** Return a EventTarget from selector or cast an existing element. */
+// export function eventTargetFromSelector(
+//   obj: string | EventTarget
+// ): EventTarget | null {
+//   if (!obj) {
+//     return null;
+//   }
+//   if (typeof obj === "string") {
+//     return document.querySelector(obj) as EventTarget;
+//   }
+//   return obj as EventTarget;
+// }
 /**
  * Return a canonical descriptive string for a keyboard or mouse event.
  *
@@ -403,7 +708,9 @@ function eventTargetFromSelector(obj) {
  * ```
  */
 function eventToString(event) {
-    let key = event.key, et = event.type, s = [];
+    const key = event.key;
+    const et = event.type;
+    const s = [];
     if (event.altKey) {
         s.push("Alt");
     }
@@ -441,11 +748,11 @@ function eventToString(event) {
 // TODO: support deep merge --> https://stackoverflow.com/a/42740894
 function extend(...args) {
     for (let i = 1; i < args.length; i++) {
-        let arg = args[i];
+        const arg = args[i];
         if (arg == null) {
             continue;
         }
-        for (let key in arg) {
+        for (const key in arg) {
             if (Object.prototype.hasOwnProperty.call(arg, key)) {
                 args[0][key] = arg[key];
             }
@@ -457,7 +764,7 @@ function extend(...args) {
 function isArray(obj) {
     return Array.isArray(obj);
 }
-/** Return true if `obj` is of type `Object` and has no propertied. */
+/** Return true if `obj` is of type `Object` and has no properties. */
 function isEmptyObject(obj) {
     return Object.keys(obj).length === 0 && obj.constructor === Object;
 }
@@ -473,7 +780,8 @@ function isPlainObject(obj) {
 function noop(...args) { }
 function onEvent(rootTarget, eventNames, selectorOrHandler, handlerOrNone) {
     let selector, handler;
-    rootTarget = eventTargetFromSelector(rootTarget);
+    rootTarget = elemFromSelector(rootTarget);
+    // rootTarget = eventTargetFromSelector<EventTarget>(rootTarget)!;
     if (handlerOrNone) {
         selector = selectorOrHandler;
         handler = handlerOrNone;
@@ -513,12 +821,16 @@ function onEvent(rootTarget, eventNames, selectorOrHandler, handlerOrNone) {
   ```
   */
 function overrideMethod(instance, methodName, handler, ctx) {
-    let prevSuper, prevSuperApply, self = ctx || instance, prevFunc = instance[methodName], _super = (...args) => {
+    let prevSuper, prevSuperApply;
+    const self = ctx || instance;
+    const prevFunc = instance[methodName];
+    const _super = (...args) => {
         return prevFunc.apply(self, args);
-    }, _superApply = (argsArray) => {
+    };
+    const _superApply = (argsArray) => {
         return prevFunc.apply(self, argsArray);
     };
-    let wrapper = (...args) => {
+    const wrapper = (...args) => {
         try {
             prevSuper = self._super;
             prevSuperApply = self._superApply;
@@ -571,7 +883,7 @@ async function sleep(ms) {
  */
 function toggleCheckbox(element, value, tristate) {
     const input = elemFromSelector(element);
-    assert(input.type === "checkbox");
+    assert(input.type === "checkbox", `Expected a checkbox: ${input.type}`);
     tristate !== null && tristate !== void 0 ? tristate : (tristate = input.classList.contains("wb-tristate") || input.indeterminate);
     if (value === undefined) {
         const curValue = input.indeterminate ? null : input.checked;
@@ -604,9 +916,14 @@ function getOption(opts, name, defaultValue = undefined) {
         [ext, name] = name.split(".");
         opts = opts[ext];
     }
-    let value = opts ? opts[name] : null;
+    const value = opts ? opts[name] : null;
     // Use value from value options dict, fallback do default
     return value !== null && value !== void 0 ? value : defaultValue;
+}
+/** Return the next value from a list of values (rotating). @since 0.11 */
+function rotate(value, values) {
+    const idx = values.indexOf(value);
+    return values[(idx + 1) % values.length];
 }
 /** Convert an Array or space-separated string to a Set. */
 function toSet(val) {
@@ -614,7 +931,7 @@ function toSet(val) {
         return val;
     }
     if (typeof val === "string") {
-        let set = new Set();
+        const set = new Set();
         for (const c of val.split(" ")) {
             set.add(c.trim());
         }
@@ -624,6 +941,44 @@ function toSet(val) {
         return new Set(val);
     }
     throw new Error("Cannot convert to Set<string>: " + val);
+}
+/** Convert a pixel string to number.
+ * We accept a number or a string like '123px'. If undefined, the first default
+ * value that is a number or a string ending with 'px' is returned.
+ *
+ * Example:
+ * ```js
+ * let x = undefined;
+ * let y = "123px";
+ * const width = util.toPixel(x, y, 100);  // returns 123
+ * ```
+ */
+function toPixel(...defaults) {
+    for (const d of defaults) {
+        if (typeof d === "number") {
+            return d;
+        }
+        if (typeof d === "string" && d.endsWith("px")) {
+            return parseInt(d, 10);
+        }
+        assert(d == null, `Expected a number or string like '123px': ${d}`);
+    }
+    throw new Error(`Expected a string like '123px': ${defaults}`);
+}
+/** Return the the boolean value of the first non-null element.
+ * Example:
+ * ```js
+ * const opts = { flag: true };
+ * const value = util.toBool(opts.foo, opts.flag, false);  // returns true
+ * ```
+ */
+function toBool(...boolDefaults) {
+    for (const d of boolDefaults) {
+        if (d != null) {
+            return !!d;
+        }
+    }
+    throw new Error("No default boolean value provided");
 }
 // /** Check if a string is contained in an Array or Set. */
 // export function isAnyOf(s: string, items: Array<string>|Set<string>): boolean {
@@ -660,8 +1015,6 @@ function type(obj) {
  * ```
  */
 function adaptiveThrottle(callback, options) {
-    let waiting = 0; // Initially, we're not waiting
-    let pendingArgs = null;
     const opts = Object.assign({
         minDelay: 16,
         defaultDelay: 200,
@@ -670,6 +1023,9 @@ function adaptiveThrottle(callback, options) {
     }, options);
     const minDelay = Math.max(16, +opts.minDelay);
     const maxDelay = +opts.maxDelay;
+    let waiting = 0; // Initially, we're not waiting
+    let pendingArgs = null;
+    let pendingTimer = null;
     const throttledFn = (...args) => {
         if (waiting) {
             pendingArgs = args;
@@ -687,7 +1043,7 @@ function adaptiveThrottle(callback, options) {
                 callback.apply(this, useArgs);
             }
             catch (error) {
-                console.error(error);
+                console.error(error); // eslint-disable-line no-console
             }
             const elap = Date.now() - start;
             const curDelay = Math.min(Math.max(minDelay, elap * opts.delayFactor), maxDelay);
@@ -696,9 +1052,10 @@ function adaptiveThrottle(callback, options) {
             //   `adaptiveThrottle() calling worker took ${elap}ms. delay = ${curDelay}ms, using ${useDelay}ms`,
             //   pendingArgs
             // );
-            setTimeout(() => {
+            pendingTimer = setTimeout(() => {
                 // Unblock, and trigger pending requests if any
                 // const skipped = waiting - 1;
+                pendingTimer = null;
                 waiting = 0; // And allow future invocations
                 if (pendingArgs != null) {
                     // There was another request while running or waiting
@@ -711,55 +1068,74 @@ function adaptiveThrottle(callback, options) {
             }, useDelay);
         }
     };
+    throttledFn.cancel = () => {
+        if (pendingTimer) {
+            clearTimeout(pendingTimer);
+            pendingTimer = null;
+        }
+        pendingArgs = null;
+        waiting = 0;
+    };
+    throttledFn.pending = () => {
+        return !!pendingTimer;
+    };
+    throttledFn.flush = () => {
+        throw new Error("Not implemented");
+    };
     return throttledFn;
 }
 
 var util = /*#__PURE__*/Object.freeze({
-  __proto__: null,
-  Deferred: Deferred$1,
-  MAX_INT: MAX_INT,
-  MOUSE_BUTTONS: MOUSE_BUTTONS,
-  adaptiveThrottle: adaptiveThrottle,
-  assert: assert,
-  documentReady: documentReady,
-  documentReadyPromise: documentReadyPromise,
-  each: each,
-  elemFromHtml: elemFromHtml,
-  elemFromSelector: elemFromSelector,
-  error: error,
-  escapeHtml: escapeHtml,
-  escapeRegex: escapeRegex,
-  escapeTooltip: escapeTooltip,
-  eventTargetFromSelector: eventTargetFromSelector,
-  eventToString: eventToString,
-  extend: extend,
-  extractHtmlText: extractHtmlText,
-  getOption: getOption,
-  getValueFromElem: getValueFromElem,
-  isArray: isArray,
-  isEmptyObject: isEmptyObject,
-  isFunction: isFunction,
-  isMac: isMac,
-  isPlainObject: isPlainObject,
-  noop: noop,
-  onEvent: onEvent,
-  overrideMethod: overrideMethod,
-  setElemDisplay: setElemDisplay,
-  setTimeoutPromise: setTimeoutPromise,
-  setValueToElem: setValueToElem,
-  sleep: sleep,
-  toSet: toSet,
-  toggleCheckbox: toggleCheckbox,
-  type: type
+    __proto__: null,
+    Deferred: Deferred$1,
+    MAX_INT: MAX_INT,
+    MOUSE_BUTTONS: MOUSE_BUTTONS,
+    ValidationError: ValidationError,
+    adaptiveThrottle: adaptiveThrottle,
+    assert: assert,
+    debounce: debounce,
+    documentReady: documentReady,
+    documentReadyPromise: documentReadyPromise,
+    each: each,
+    elemFromHtml: elemFromHtml,
+    elemFromSelector: elemFromSelector,
+    error: error,
+    escapeHtml: escapeHtml,
+    escapeRegex: escapeRegex,
+    escapeTooltip: escapeTooltip,
+    eventToString: eventToString,
+    extend: extend,
+    extractHtmlText: extractHtmlText,
+    getOption: getOption,
+    getValueFromElem: getValueFromElem,
+    isArray: isArray,
+    isEmptyObject: isEmptyObject,
+    isFunction: isFunction,
+    isMac: isMac,
+    isPlainObject: isPlainObject,
+    noop: noop,
+    onEvent: onEvent,
+    overrideMethod: overrideMethod,
+    rotate: rotate,
+    setElemDisplay: setElemDisplay,
+    setTimeoutPromise: setTimeoutPromise,
+    setValueToElem: setValueToElem,
+    sleep: sleep,
+    throttle: throttle,
+    toBool: toBool,
+    toPixel: toPixel,
+    toSet: toSet,
+    toggleCheckbox: toggleCheckbox,
+    type: type
 });
 
 /*!
  * Wunderbaum - types
- * Copyright (c) 2021-2023, Martin Wendt. Released under the MIT license.
- * v0.4.0, Wed, 06 Sep 2023 08:21:56 GMT (https://github.com/mar10/wunderbaum)
+ * Copyright (c) 2021-2024, Martin Wendt. Released under the MIT license.
+ * v0.11.0, Sun, 04 Aug 2024 15:35:53 GMT (https://github.com/mar10/wunderbaum)
  */
 /**
- * Possible values for {@link WunderbaumNode.update()} and {@link Wunderbaum.update()}.
+ * Possible values for {@link WunderbaumNode.update} and {@link Wunderbaum.update}.
  */
 var ChangeType;
 (function (ChangeType) {
@@ -788,14 +1164,14 @@ var RenderFlag;
     RenderFlag["redraw"] = "redraw";
     RenderFlag["scroll"] = "scroll";
 })(RenderFlag || (RenderFlag = {}));
-/** Possible values for {@link WunderbaumNode.setStatus()}. */
+/** Possible values for {@link WunderbaumNode.setStatus}. */
 var NodeStatusType;
 (function (NodeStatusType) {
     NodeStatusType["ok"] = "ok";
     NodeStatusType["loading"] = "loading";
     NodeStatusType["error"] = "error";
     NodeStatusType["noData"] = "noData";
-    // paging = "paging",
+    NodeStatusType["paging"] = "paging";
 })(NodeStatusType || (NodeStatusType = {}));
 /** Define the subregion of a node, where an event occurred. */
 var NodeRegion;
@@ -819,8 +1195,8 @@ var NavModeEnum;
 
 /*!
  * Wunderbaum - wb_extension_base
- * Copyright (c) 2021-2023, Martin Wendt. Released under the MIT license.
- * v0.4.0, Wed, 06 Sep 2023 08:21:56 GMT (https://github.com/mar10/wunderbaum)
+ * Copyright (c) 2021-2024, Martin Wendt. Released under the MIT license.
+ * v0.11.0, Sun, 04 Aug 2024 15:35:53 GMT (https://github.com/mar10/wunderbaum)
  */
 class WunderbaumExtension {
     constructor(tree, id, defaults) {
@@ -877,305 +1253,9 @@ class WunderbaumExtension {
 }
 
 /*!
- * debounce & throttle, taken from https://github.com/lodash/lodash v4.17.21
- * MIT License: https://raw.githubusercontent.com/lodash/lodash/4.17.21-npm/LICENSE
- * Modified for TypeScript type annotations.
- */
-/* --- */
-/** Detect free variable `global` from Node.js. */
-const freeGlobal = typeof global === "object" &&
-    global !== null &&
-    global.Object === Object &&
-    global;
-/** Detect free variable `globalThis` */
-const freeGlobalThis = typeof globalThis === "object" &&
-    globalThis !== null &&
-    globalThis.Object == Object &&
-    globalThis;
-/** Detect free variable `self`. */
-const freeSelf = typeof self === "object" && self !== null && self.Object === Object && self;
-/** Used as a reference to the global object. */
-const root = freeGlobalThis || freeGlobal || freeSelf || Function("return this")();
-/**
- * Checks if `value` is the
- * [language type](http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-types)
- * of `Object`. (e.g. arrays, functions, objects, regexes, `new Number(0)`, and `new String('')`)
- *
- * @since 0.1.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is an object, else `false`.
- * @example
- *
- * isObject({})
- * // => true
- *
- * isObject([1, 2, 3])
- * // => true
- *
- * isObject(Function)
- * // => true
- *
- * isObject(null)
- * // => false
- */
-function isObject(value) {
-    const type = typeof value;
-    return value != null && (type === "object" || type === "function");
-}
-/**
- * Creates a debounced function that delays invoking `func` until after `wait`
- * milliseconds have elapsed since the last time the debounced function was
- * invoked, or until the next browser frame is drawn. The debounced function
- * comes with a `cancel` method to cancel delayed `func` invocations and a
- * `flush` method to immediately invoke them. Provide `options` to indicate
- * whether `func` should be invoked on the leading and/or trailing edge of the
- * `wait` timeout. The `func` is invoked with the last arguments provided to the
- * debounced function. Subsequent calls to the debounced function return the
- * result of the last `func` invocation.
- *
- * **Note:** If `leading` and `trailing` options are `true`, `func` is
- * invoked on the trailing edge of the timeout only if the debounced function
- * is invoked more than once during the `wait` timeout.
- *
- * If `wait` is `0` and `leading` is `false`, `func` invocation is deferred
- * until the next tick, similar to `setTimeout` with a timeout of `0`.
- *
- * If `wait` is omitted in an environment with `requestAnimationFrame`, `func`
- * invocation will be deferred until the next frame is drawn (typically about
- * 16ms).
- *
- * See [David Corbacho's article](https://css-tricks.com/debouncing-throttling-explained-examples/)
- * for details over the differences between `debounce` and `throttle`.
- *
- * @since 0.1.0
- * @category Function
- * @param {Function} func The function to debounce.
- * @param {number} [wait=0]
- *  The number of milliseconds to delay; if omitted, `requestAnimationFrame` is
- *  used (if available).
- * @param {Object} [options={}] The options object.
- * @param {boolean} [options.leading=false]
- *  Specify invoking on the leading edge of the timeout.
- * @param {number} [options.maxWait]
- *  The maximum time `func` is allowed to be delayed before it's invoked.
- * @param {boolean} [options.trailing=true]
- *  Specify invoking on the trailing edge of the timeout.
- * @returns {Function} Returns the new debounced function.
- * @example
- *
- * // Avoid costly calculations while the window size is in flux.
- * jQuery(window).on('resize', debounce(calculateLayout, 150))
- *
- * // Invoke `sendMail` when clicked, debouncing subsequent calls.
- * jQuery(element).on('click', debounce(sendMail, 300, {
- *   'leading': true,
- *   'trailing': false
- * }))
- *
- * // Ensure `batchLog` is invoked once after 1 second of debounced calls.
- * const debounced = debounce(batchLog, 250, { 'maxWait': 1000 })
- * const source = new EventSource('/stream')
- * jQuery(source).on('message', debounced)
- *
- * // Cancel the trailing debounced invocation.
- * jQuery(window).on('popstate', debounced.cancel)
- *
- * // Check for pending invocations.
- * const status = debounced.pending() ? "Pending..." : "Ready"
- */
-function debounce(func, wait = 0, options = {}) {
-    let lastArgs, lastThis, maxWait, result, timerId, lastCallTime;
-    let lastInvokeTime = 0;
-    let leading = false;
-    let maxing = false;
-    let trailing = true;
-    // Bypass `requestAnimationFrame` by explicitly setting `wait=0`.
-    const useRAF = !wait && wait !== 0 && typeof root.requestAnimationFrame === "function";
-    if (typeof func !== "function") {
-        throw new TypeError("Expected a function");
-    }
-    wait = +wait || 0;
-    if (isObject(options)) {
-        leading = !!options.leading;
-        maxing = "maxWait" in options;
-        maxWait = maxing ? Math.max(+options.maxWait || 0, wait) : maxWait;
-        trailing = "trailing" in options ? !!options.trailing : trailing;
-    }
-    function invokeFunc(time) {
-        const args = lastArgs;
-        const thisArg = lastThis;
-        lastArgs = lastThis = undefined;
-        lastInvokeTime = time;
-        result = func.apply(thisArg, args);
-        return result;
-    }
-    function startTimer(pendingFunc, wait) {
-        if (useRAF) {
-            root.cancelAnimationFrame(timerId);
-            return root.requestAnimationFrame(pendingFunc);
-        }
-        return setTimeout(pendingFunc, wait);
-    }
-    function cancelTimer(id) {
-        if (useRAF) {
-            return root.cancelAnimationFrame(id);
-        }
-        clearTimeout(id);
-    }
-    function leadingEdge(time) {
-        // Reset any `maxWait` timer.
-        lastInvokeTime = time;
-        // Start the timer for the trailing edge.
-        timerId = startTimer(timerExpired, wait);
-        // Invoke the leading edge.
-        return leading ? invokeFunc(time) : result;
-    }
-    function remainingWait(time) {
-        const timeSinceLastCall = time - lastCallTime;
-        const timeSinceLastInvoke = time - lastInvokeTime;
-        const timeWaiting = wait - timeSinceLastCall;
-        return maxing
-            ? Math.min(timeWaiting, maxWait - timeSinceLastInvoke)
-            : timeWaiting;
-    }
-    function shouldInvoke(time) {
-        const timeSinceLastCall = time - lastCallTime;
-        const timeSinceLastInvoke = time - lastInvokeTime;
-        // Either this is the first call, activity has stopped and we're at the
-        // trailing edge, the system time has gone backwards and we're treating
-        // it as the trailing edge, or we've hit the `maxWait` limit.
-        return (lastCallTime === undefined ||
-            timeSinceLastCall >= wait ||
-            timeSinceLastCall < 0 ||
-            (maxing && timeSinceLastInvoke >= maxWait));
-    }
-    function timerExpired() {
-        const time = Date.now();
-        if (shouldInvoke(time)) {
-            return trailingEdge(time);
-        }
-        // Restart the timer.
-        timerId = startTimer(timerExpired, remainingWait(time));
-    }
-    function trailingEdge(time) {
-        timerId = undefined;
-        // Only invoke if we have `lastArgs` which means `func` has been
-        // debounced at least once.
-        if (trailing && lastArgs) {
-            return invokeFunc(time);
-        }
-        lastArgs = lastThis = undefined;
-        return result;
-    }
-    function cancel() {
-        if (timerId !== undefined) {
-            cancelTimer(timerId);
-        }
-        lastInvokeTime = 0;
-        lastArgs = lastCallTime = lastThis = timerId = undefined;
-    }
-    function flush() {
-        return timerId === undefined ? result : trailingEdge(Date.now());
-    }
-    function pending() {
-        return timerId !== undefined;
-    }
-    function debounced(...args) {
-        const time = Date.now();
-        const isInvoking = shouldInvoke(time);
-        lastArgs = args;
-        lastThis = this;
-        lastCallTime = time;
-        if (isInvoking) {
-            if (timerId === undefined) {
-                return leadingEdge(lastCallTime);
-            }
-            if (maxing) {
-                // Handle invocations in a tight loop.
-                timerId = startTimer(timerExpired, wait);
-                return invokeFunc(lastCallTime);
-            }
-        }
-        if (timerId === undefined) {
-            timerId = startTimer(timerExpired, wait);
-        }
-        return result;
-    }
-    debounced.cancel = cancel;
-    debounced.flush = flush;
-    debounced.pending = pending;
-    return debounced;
-}
-/**
- * Creates a throttled function that only invokes `func` at most once per
- * every `wait` milliseconds (or once per browser frame). The throttled function
- * comes with a `cancel` method to cancel delayed `func` invocations and a
- * `flush` method to immediately invoke them. Provide `options` to indicate
- * whether `func` should be invoked on the leading and/or trailing edge of the
- * `wait` timeout. The `func` is invoked with the last arguments provided to the
- * throttled function. Subsequent calls to the throttled function return the
- * result of the last `func` invocation.
- *
- * **Note:** If `leading` and `trailing` options are `true`, `func` is
- * invoked on the trailing edge of the timeout only if the throttled function
- * is invoked more than once during the `wait` timeout.
- *
- * If `wait` is `0` and `leading` is `false`, `func` invocation is deferred
- * until the next tick, similar to `setTimeout` with a timeout of `0`.
- *
- * If `wait` is omitted in an environment with `requestAnimationFrame`, `func`
- * invocation will be deferred until the next frame is drawn (typically about
- * 16ms).
- *
- * See [David Corbacho's article](https://css-tricks.com/debouncing-throttling-explained-examples/)
- * for details over the differences between `throttle` and `debounce`.
- *
- * @since 0.1.0
- * @category Function
- * @param {Function} func The function to throttle.
- * @param {number} [wait=0]
- *  The number of milliseconds to throttle invocations to; if omitted,
- *  `requestAnimationFrame` is used (if available).
- * @param {Object} [options={}] The options object.
- * @param {boolean} [options.leading=true]
- *  Specify invoking on the leading edge of the timeout.
- * @param {boolean} [options.trailing=true]
- *  Specify invoking on the trailing edge of the timeout.
- * @returns {Function} Returns the new throttled function.
- * @example
- *
- * // Avoid excessively updating the position while scrolling.
- * jQuery(window).on('scroll', throttle(updatePosition, 100))
- *
- * // Invoke `renewToken` when the click event is fired, but not more than once every 5 minutes.
- * const throttled = throttle(renewToken, 300000, { 'trailing': false })
- * jQuery(element).on('click', throttled)
- *
- * // Cancel the trailing throttled invocation.
- * jQuery(window).on('popstate', throttled.cancel)
- */
-function throttle(func, wait = 0, options = {}) {
-    let leading = true;
-    let trailing = true;
-    if (typeof func !== "function") {
-        throw new TypeError("Expected a function");
-    }
-    if (isObject(options)) {
-        leading = "leading" in options ? !!options.leading : leading;
-        trailing = "trailing" in options ? !!options.trailing : trailing;
-    }
-    return debounce(func, wait, {
-        leading,
-        trailing,
-        maxWait: wait,
-    });
-}
-
-/*!
  * Wunderbaum - ext-filter
- * Copyright (c) 2021-2023, Martin Wendt. Released under the MIT license.
- * v0.4.0, Wed, 06 Sep 2023 08:21:56 GMT (https://github.com/mar10/wunderbaum)
+ * Copyright (c) 2021-2024, Martin Wendt. Released under the MIT license.
+ * v0.11.0, Sun, 04 Aug 2024 15:35:53 GMT (https://github.com/mar10/wunderbaum)
  */
 const START_MARKER = "\uFFF7";
 const END_MARKER = "\uFFF8";
@@ -1184,16 +1264,15 @@ const RE_END_MARTKER = new RegExp(escapeRegex(END_MARKER), "g");
 class FilterExtension extends WunderbaumExtension {
     constructor(tree) {
         super(tree, "filter", {
-            connectInput: null,
-            autoApply: true,
-            autoExpand: false,
-            counter: true,
-            fuzzy: false,
-            hideExpandedCounter: true,
-            hideExpanders: false,
-            highlight: true,
-            leavesOnly: false,
-            mode: "dim",
+            autoApply: true, // Re-apply last filter if lazy data is loaded
+            autoExpand: false, // Expand all branches that contain matches while filtered
+            matchBranch: false, // Whether to implicitly match all children of matched nodes
+            connectInput: null, // Element or selector of an input control for filter query strings
+            fuzzy: false, // Match single characters in order, e.g. 'fb' will match 'FooBar'
+            hideExpanders: false, // Hide expanders if all child nodes are hidden by filter
+            highlight: true, // Highlight matches by wrapping inside <mark> tags
+            leavesOnly: false, // Match end nodes only
+            mode: "dim", // Grayout unmatched nodes (pass "hide" to remove unmatched node instead)
             noData: true, // Display a 'no data' status node if result is empty
         });
         this.lastFilterArgs = null;
@@ -1203,6 +1282,7 @@ class FilterExtension extends WunderbaumExtension {
         const connectInput = this.getPluginOption("connectInput");
         if (connectInput) {
             this.queryInput = elemFromSelector(connectInput);
+            assert(this.queryInput, `Invalid 'filter.connectInput' option: ${connectInput}.`);
             onEvent(this.queryInput, "input", debounce((e) => {
                 // this.tree.log("query", e);
                 this.filterNodes(this.queryInput.value.trim(), {});
@@ -1219,27 +1299,38 @@ class FilterExtension extends WunderbaumExtension {
                 break;
         }
     }
-    _applyFilterNoUpdate(filter, branchMode, _opts) {
+    _applyFilterNoUpdate(filter, _opts) {
         return this.tree.runWithDeferredUpdate(() => {
-            return this._applyFilterImpl(filter, branchMode, _opts);
+            return this._applyFilterImpl(filter, _opts);
         });
     }
-    _applyFilterImpl(filter, branchMode, _opts) {
-        let match, temp, start = Date.now(), count = 0, tree = this.tree, treeOpts = tree.options, 
-        // escapeTitles = treeOpts.escapeTitles,
-        prevAutoCollapse = treeOpts.autoCollapse, opts = extend({}, treeOpts.filter, _opts), hideMode = opts.mode === "hide", leavesOnly = !!opts.leavesOnly && !branchMode;
+    _applyFilterImpl(filter, _opts) {
+        let //temp,
+        count = 0;
+        const start = Date.now();
+        const tree = this.tree;
+        const treeOpts = tree.options;
+        const prevAutoCollapse = treeOpts.autoCollapse;
+        // Use default options from `tree.options.filter`, but allow to override them
+        const opts = extend({}, treeOpts.filter, _opts);
+        const hideMode = opts.mode === "hide";
+        const matchBranch = !!opts.matchBranch;
+        const leavesOnly = !!opts.leavesOnly && !matchBranch;
+        let filterRegExp;
+        let highlightRegExp;
         // Default to 'match title substring (case insensitive)'
-        if (typeof filter === "string") {
+        if (typeof filter === "string" || filter instanceof RegExp) {
             if (filter === "") {
                 tree.logInfo("Passing an empty string as a filter is handled as clearFilter().");
                 this.clearFilter();
-                return;
+                return 0;
             }
             if (opts.fuzzy) {
+                assert(typeof filter === "string", "fuzzy filter must be a string");
                 // See https://codereview.stackexchange.com/questions/23899/faster-javascript-fuzzy-string-matching-function/23905#23905
                 // and http://www.quora.com/How-is-the-fuzzy-search-algorithm-in-Sublime-Text-designed
                 // and http://www.dustindiaz.com/autocomplete-fuzzy-matching
-                match = filter
+                const matchReString = filter
                     .split("")
                     // Escaping the `filter` will not work because,
                     // it gets further split into individual characters. So,
@@ -1250,52 +1341,53 @@ class FilterExtension extends WunderbaumExtension {
                     // the character
                     return a + "([^" + b + "]*)" + b;
                 }, "");
+                filterRegExp = new RegExp(matchReString, "i");
+                // highlightRegExp = new RegExp(escapeRegex(filter), "gi");
+            }
+            else if (filter instanceof RegExp) {
+                filterRegExp = filter;
+                highlightRegExp = filter;
             }
             else {
-                match = escapeRegex(filter); // make sure a '.' is treated literally
+                const matchReString = escapeRegex(filter); // make sure a '.' is treated literally
+                filterRegExp = new RegExp(matchReString, "i");
+                highlightRegExp = new RegExp(matchReString, "gi");
             }
-            let re = new RegExp(match, "i");
-            let reHighlight = new RegExp(escapeRegex(filter), "gi");
+            tree.logDebug(`Filtering nodes by '${filterRegExp}'`);
+            // const re = new RegExp(match, "i");
+            // const reHighlight = new RegExp(escapeRegex(filter), "gi");
             filter = (node) => {
                 if (!node.title) {
                     return false;
                 }
                 // let text = escapeTitles ? node.title : extractHtmlText(node.title);
-                let text = node.title;
+                const text = node.title;
                 // `.match` instead of `.test` to get the capture groups
-                let res = text.match(re);
+                // const res = text.match(filterRegExp);
+                const res = filterRegExp.exec(text);
                 if (res && opts.highlight) {
-                    // if (escapeTitles) {
+                    let highlightString;
                     if (opts.fuzzy) {
-                        temp = _markFuzzyMatchedChars(text, res, true);
+                        highlightString = _markFuzzyMatchedChars(text, res, true);
                     }
                     else {
                         // #740: we must not apply the marks to escaped entity names, e.g. `&quot;`
                         // Use some exotic characters to mark matches:
-                        temp = text.replace(reHighlight, function (s) {
+                        highlightString = text.replace(highlightRegExp, function (s) {
                             return START_MARKER + s + END_MARKER;
                         });
                     }
                     // now we can escape the title...
-                    node.titleWithHighlight = escapeHtml(temp)
+                    node.titleWithHighlight = escapeHtml(highlightString)
                         // ... and finally insert the desired `<mark>` tags
                         .replace(RE_START_MARKER, "<mark>")
                         .replace(RE_END_MARTKER, "</mark>");
-                    // } else {
-                    //   if (opts.fuzzy) {
-                    //     node.titleWithHighlight = _markFuzzyMatchedChars(text, res);
-                    //   } else {
-                    //     node.titleWithHighlight = text.replace(reHighlight, function (s) {
-                    //       return "<mark>" + s + "</mark>";
-                    //     });
-                    //   }
-                    // }
-                    // node.debug("filter", escapeTitles, text, node.titleWithHighlight);
                 }
                 return !!res;
             };
         }
         tree.filterMode = opts.mode;
+        // eslint-disable-next-line prefer-rest-params, prefer-spread
         this.lastFilterArgs = arguments;
         tree.element.classList.toggle("wb-ext-filter-hide", !!hideMode);
         tree.element.classList.toggle("wb-ext-filter-dim", !hideMode);
@@ -1326,7 +1418,7 @@ class FilterExtension extends WunderbaumExtension {
                 return "skip";
             }
             let matchedByBranch = false;
-            if ((branchMode || res === "branch") && node.parent.match) {
+            if ((matchBranch || res === "branch") && node.parent.match) {
                 res = true;
                 matchedByBranch = true;
             }
@@ -1342,7 +1434,6 @@ class FilterExtension extends WunderbaumExtension {
                         p.setExpanded(true, {
                             noAnimation: true,
                             noEvents: true,
-                            scrollIntoView: false,
                         });
                         p._filterAutoExpanded = true;
                     }
@@ -1351,32 +1442,54 @@ class FilterExtension extends WunderbaumExtension {
         });
         treeOpts.autoCollapse = prevAutoCollapse;
         if (count === 0 && opts.noData && hideMode) {
-            tree.root.setStatus(NodeStatusType.noData);
+            if (typeof opts.noData === "string") {
+                tree.root.setStatus(NodeStatusType.noData, { message: opts.noData });
+            }
+            else {
+                tree.root.setStatus(NodeStatusType.noData);
+            }
         }
         // Redraw whole tree
-        tree.logInfo(`Filter '${match}' found ${count} nodes in ${Date.now() - start} ms.`);
+        tree.logDebug(`Filter '${filter}' found ${count} nodes in ${Date.now() - start} ms.`);
         return count;
     }
     /**
      * [ext-filter] Dim or hide nodes.
      */
     filterNodes(filter, options) {
-        return this._applyFilterNoUpdate(filter, false, options);
+        return this._applyFilterNoUpdate(filter, options);
     }
     /**
      * [ext-filter] Dim or hide whole branches.
+     * @deprecated Use {@link filterNodes} instead and set `options.matchBranch: true`.
      */
     filterBranches(filter, options) {
-        return this._applyFilterNoUpdate(filter, true, options);
+        assert(options.matchBranch === undefined, "filterBranches() is deprecated.");
+        options.matchBranch = true;
+        return this._applyFilterNoUpdate(filter, options);
+    }
+    /**
+     * [ext-filter] Return the number of matched nodes.
+     */
+    countMatches() {
+        let n = 0;
+        this.tree.visit((node) => {
+            if (node.match && !node.statusNodeType) {
+                n++;
+            }
+        });
+        return n;
     }
     /**
      * [ext-filter] Re-apply current filter.
      */
     updateFilter() {
-        let tree = this.tree;
+        var _a;
+        const tree = this.tree;
         if (tree.filterMode &&
             this.lastFilterArgs &&
-            tree.options.filter.autoApply) {
+            ((_a = tree.options.filter) === null || _a === void 0 ? void 0 : _a.autoApply)) {
+            // eslint-disable-next-line prefer-spread
             this._applyFilterNoUpdate.apply(this, this.lastFilterArgs);
         }
         else {
@@ -1387,10 +1500,9 @@ class FilterExtension extends WunderbaumExtension {
      * [ext-filter] Reset the filter.
      */
     clearFilter() {
-        let tree = this.tree;
+        const tree = this.tree;
         // statusNode = tree.root.findDirectChild(KEY_NODATA),
         // escapeTitles = tree.options.escapeTitles;
-        // enhanceTitle = tree.options.enhanceTitle,
         tree.enableUpdate(false);
         // if (statusNode) {
         //   statusNode.remove();
@@ -1400,28 +1512,21 @@ class FilterExtension extends WunderbaumExtension {
         delete tree.root.match;
         delete tree.root.subMatchCount;
         tree.visit((node) => {
-            if (node.match && node._rowElem) {
-                // #491, #601
-                let titleElem = node._rowElem.querySelector("span.wb-title");
-                // if (escapeTitles) {
-                titleElem.textContent = node.title;
-                // } else {
-                //   titleElem.innerHTML = node.title;
-                // }
-                node._callEvent("enhanceTitle", { titleElem: titleElem });
-            }
+            // if (node.match && node._rowElem) {
+            //   let titleElem = node._rowElem.querySelector("span.wb-title")!;
+            //   node._callEvent("enhanceTitle", { titleElem: titleElem });
+            // }
             delete node.match;
             delete node.subMatchCount;
             delete node.titleWithHighlight;
-            if (node.subMatchBadge) {
-                node.subMatchBadge.remove();
-                delete node.subMatchBadge;
-            }
+            // if (node.subMatchBadge) {
+            //   node.subMatchBadge.remove();
+            //   delete node.subMatchBadge;
+            // }
             if (node._filterAutoExpanded && node.expanded) {
                 node.setExpanded(false, {
                     noAnimation: true,
                     noEvents: true,
-                    scrollIntoView: false,
                 });
             }
             delete node._filterAutoExpanded;
@@ -1443,10 +1548,10 @@ class FilterExtension extends WunderbaumExtension {
  * @param {RegExpMatchArray} matches
  */
 function _markFuzzyMatchedChars(text, matches, escapeTitles = true) {
-    let matchingIndices = [];
+    const matchingIndices = [];
     // get the indices of matched characters (Iterate through `RegExpMatchArray`)
     for (let _matchingArrIdx = 1; _matchingArrIdx < matches.length; _matchingArrIdx++) {
-        let _mIdx = 
+        const _mIdx = 
         // get matching char index by cumulatively adding
         // the matched group length
         matches[_matchingArrIdx].length +
@@ -1455,7 +1560,7 @@ function _markFuzzyMatchedChars(text, matches, escapeTitles = true) {
         matchingIndices.push(_mIdx);
     }
     // Map each `text` char to its position and store in `textPoses`.
-    let textPoses = text.split("");
+    const textPoses = text.split("");
     if (escapeTitles) {
         // If escaping the title, then wrap the matching char within exotic chars
         matchingIndices.forEach(function (v) {
@@ -1474,8 +1579,8 @@ function _markFuzzyMatchedChars(text, matches, escapeTitles = true) {
 
 /*!
  * Wunderbaum - ext-keynav
- * Copyright (c) 2021-2023, Martin Wendt. Released under the MIT license.
- * v0.4.0, Wed, 06 Sep 2023 08:21:56 GMT (https://github.com/mar10/wunderbaum)
+ * Copyright (c) 2021-2024, Martin Wendt. Released under the MIT license.
+ * v0.11.0, Sun, 04 Aug 2024 15:35:53 GMT (https://github.com/mar10/wunderbaum)
  */
 const QUICKSEARCH_DELAY = 500;
 class KeynavExtension extends WunderbaumExtension {
@@ -1497,6 +1602,13 @@ class KeynavExtension extends WunderbaumExtension {
         }
         return input;
     }
+    // /* Return the current cell's embedded input that has keyboard focus. */
+    // protected _getFocusedInputElem(): HTMLInputElement | null {
+    //   const ace = this.tree
+    //     .getActiveColElem()
+    //     ?.querySelector<HTMLInputElement>("input:focus,select:focus");
+    //   return ace || null;
+    // }
     /* Return true if the current cell's embedded input has keyboard focus. */
     _isCurInputFocused() {
         var _a;
@@ -1505,8 +1617,13 @@ class KeynavExtension extends WunderbaumExtension {
         return !!ace;
     }
     onKeyEvent(data) {
-        const event = data.event, tree = this.tree, opts = data.options, activate = !event.ctrlKey || opts.autoActivate, curInput = this._getEmbeddedInputElem(event.target), inputHasFocus = curInput && this._isCurInputFocused(), navModeOption = opts.navigationModeOption;
-        // isCellEditMode = tree.navMode === NavigationMode.cellEdit;
+        const event = data.event;
+        const tree = this.tree;
+        const opts = data.options;
+        const activate = !event.ctrlKey || opts.autoActivate;
+        const curInput = this._getEmbeddedInputElem(event.target);
+        const inputHasFocus = curInput && this._isCurInputFocused();
+        const navModeOption = opts.navigationModeOption;
         let focusNode, eventName = eventToString(event), node = data.node, handled = true;
         // tree.log(`onKeyEvent: ${eventName}, curInput`, curInput);
         if (!tree.isEnabled()) {
@@ -1570,7 +1687,7 @@ class KeynavExtension extends WunderbaumExtension {
                 }
                 tree.lastQuicksearchTime = stamp;
                 tree.lastQuicksearchTerm += eventName;
-                let matchNode = tree.findNextNode(tree.lastQuicksearchTerm, tree.getActiveNode());
+                const matchNode = tree.findNextNode(tree.lastQuicksearchTerm, tree.getActiveNode());
                 if (matchNode) {
                     matchNode.setActive(true, { event: event });
                 }
@@ -1651,22 +1768,34 @@ class KeynavExtension extends WunderbaumExtension {
             }
         }
         else {
-            const curInput = this._getEmbeddedInputElem(null);
+            // -----------------------------------------------------------------------
+            // --- Cell Mode ---
+            // -----------------------------------------------------------------------
+            // // Standard navigation (cell mode)
+            // if (isCellEditMode && INPUT_BREAKOUT_KEYS.has(eventName)) {
+            // }
+            // const curInput = this._getEmbeddedInputElem(null);
             const curInputType = curInput ? curInput.type || curInput.tagName : "";
-            const inputHasFocus = curInput && this._isCurInputFocused();
+            // const inputHasFocus = curInput && this._isCurInputFocused();
             const inputCanFocus = curInput && curInputType !== "checkbox";
             if (inputHasFocus) {
                 if (eventName === "Escape") {
-                    // Discard changes
+                    node.logDebug(`Reset focused input on Escape`);
+                    // Discard changes and reset input validation state
+                    curInput.setCustomValidity("");
                     node._render();
                     // Keep cell-nav mode
-                    node.logDebug(`Reset focused input`);
                     tree.setFocus();
                     tree.setColumn(tree.activeColIdx);
                     return;
                     // } else if (!INPUT_BREAKOUT_KEYS.has(eventName)) {
                 }
                 else if (eventName !== "Enter") {
+                    if (curInput && curInput.checkValidity && !curInput.checkValidity()) {
+                        // Invalid input: ignore all keys except Enter and Escape
+                        node.logDebug(`Ignored ${eventName} inside invalid input`);
+                        return false;
+                    }
                     // Let current `<input>` handle it
                     node.logDebug(`Ignored ${eventName} inside focused input`);
                     return;
@@ -1681,9 +1810,10 @@ class KeynavExtension extends WunderbaumExtension {
             else if (curInput) {
                 // On a cell that has an embedded, unfocused <input>
                 if (eventName.length === 1 && inputCanFocus) {
+                    // Typing a single char
                     curInput.focus();
                     curInput.value = "";
-                    node.logDebug(`Focus imput: ${eventName}`);
+                    node.logDebug(`Focus input: ${eventName}`);
                     return false;
                 }
             }
@@ -1695,7 +1825,6 @@ class KeynavExtension extends WunderbaumExtension {
                 eventName = tree.activeColIdx > 0 ? "ArrowLeft" : "";
                 handled = true;
             }
-            else ;
             switch (eventName) {
                 case "+":
                 case "Add":
@@ -1814,14 +1943,15 @@ class KeynavExtension extends WunderbaumExtension {
 
 /*!
  * Wunderbaum - ext-logger
- * Copyright (c) 2021-2023, Martin Wendt. Released under the MIT license.
- * v0.4.0, Wed, 06 Sep 2023 08:21:56 GMT (https://github.com/mar10/wunderbaum)
+ * Copyright (c) 2021-2024, Martin Wendt. Released under the MIT license.
+ * v0.11.0, Sun, 04 Aug 2024 15:35:53 GMT (https://github.com/mar10/wunderbaum)
  */
 class LoggerExtension extends WunderbaumExtension {
     constructor(tree) {
         super(tree, "logger", {});
         this.ignoreEvents = new Set([
-            "enhanceTitle",
+            "iconBadge",
+            // "enhanceTitle",
             "render",
             "discard",
         ]);
@@ -1835,27 +1965,28 @@ class LoggerExtension extends WunderbaumExtension {
             const ignoreEvents = this.ignoreEvents;
             const prefix = this.prefix;
             overrideMethod(tree, "callEvent", function (name, extra) {
+                /* eslint-disable prefer-rest-params */
                 if (ignoreEvents.has(name)) {
                     return tree._superApply(arguments);
                 }
                 const start = Date.now();
                 const res = tree._superApply(arguments);
-                console.debug(`${prefix}: callEvent('${name}') took ${Date.now() - start} ms.`, arguments[1]);
+                tree.logDebug(`${prefix}: callEvent('${name}') took ${Date.now() - start} ms.`, arguments[1]);
                 return res;
             });
         }
     }
     onKeyEvent(data) {
         // this.tree.logInfo("onKeyEvent", eventToString(data.event), data);
-        console.debug(`${this.prefix}: onKeyEvent()`, data);
+        this.tree.logDebug(`${this.prefix}: onKeyEvent()`, data);
         return;
     }
 }
 
 /*!
  * Wunderbaum - common
- * Copyright (c) 2021-2023, Martin Wendt. Released under the MIT license.
- * v0.4.0, Wed, 06 Sep 2023 08:21:56 GMT (https://github.com/mar10/wunderbaum)
+ * Copyright (c) 2021-2024, Martin Wendt. Released under the MIT license.
+ * v0.11.0, Sun, 04 Aug 2024 15:35:53 GMT (https://github.com/mar10/wunderbaum)
  */
 const DEFAULT_DEBUGLEVEL = 3; // Replaced by rollup script
 /**
@@ -1873,6 +2004,8 @@ const ICON_WIDTH = 20;
 const TITLE_SPAN_PAD_Y = 7;
 /** Render row markup for N nodes above and below the visible viewport. */
 const RENDER_MAX_PREFETCH = 5;
+/** Minimum column width if not set otherwise. */
+const DEFAULT_MIN_COL_WIDTH = 4;
 /** Regular expression to detect if a string describes an image URL (in contrast
  * to a class name). Strings are considered image urls if they contain '.' or '/'.
  */
@@ -1883,38 +2016,74 @@ const TEST_IMG = new RegExp(/\.|\//);
  * Default node icons.
  * Requires bootstrap icons https://icons.getbootstrap.com
  */
-const iconMap = {
-    error: "bi bi-exclamation-triangle",
-    // loading: "bi bi-hourglass-split wb-busy",
-    loading: "bi bi-chevron-right wb-busy",
-    // loading: "bi bi-arrow-repeat wb-spin",
-    // loading: '<div class="spinner-border spinner-border-sm" role="status"> <span class="visually-hidden">Loading...</span> </div>',
-    // noData: "bi bi-search",
-    noData: "bi bi-question-circle",
-    expanderExpanded: "bi bi-chevron-down",
-    // expanderExpanded: "bi bi-dash-square",
-    expanderCollapsed: "bi bi-chevron-right",
-    // expanderCollapsed: "bi bi-plus-square",
-    expanderLazy: "bi bi-chevron-right wb-helper-lazy-expander",
-    // expanderLazy: "bi bi-chevron-bar-right",
-    checkChecked: "bi bi-check-square",
-    checkUnchecked: "bi bi-square",
-    checkUnknown: "bi bi-dash-square-dotted",
-    radioChecked: "bi bi-circle-fill",
-    radioUnchecked: "bi bi-circle",
-    radioUnknown: "bi bi-record-circle",
-    folder: "bi bi-folder2",
-    folderOpen: "bi bi-folder2-open",
-    folderLazy: "bi bi-folder-symlink",
-    doc: "bi bi-file-earmark",
+const iconMaps = {
+    bootstrap: {
+        error: "bi bi-exclamation-triangle",
+        // loading: "bi bi-hourglass-split wb-busy",
+        loading: "bi bi-chevron-right wb-busy",
+        // loading: "bi bi-arrow-repeat wb-spin",
+        // loading: '<div class="spinner-border spinner-border-sm" role="status"> <span class="visually-hidden">Loading...</span> </div>',
+        // noData: "bi bi-search",
+        noData: "bi bi-question-circle",
+        expanderExpanded: "bi bi-chevron-down",
+        // expanderExpanded: "bi bi-dash-square",
+        expanderCollapsed: "bi bi-chevron-right",
+        // expanderCollapsed: "bi bi-plus-square",
+        expanderLazy: "bi bi-chevron-right wb-helper-lazy-expander",
+        // expanderLazy: "bi bi-chevron-bar-right",
+        checkChecked: "bi bi-check-square",
+        checkUnchecked: "bi bi-square",
+        checkUnknown: "bi bi-dash-square-dotted",
+        radioChecked: "bi bi-circle-fill",
+        radioUnchecked: "bi bi-circle",
+        radioUnknown: "bi bi-record-circle",
+        folder: "bi bi-folder2",
+        folderOpen: "bi bi-folder2-open",
+        folderLazy: "bi bi-folder-symlink",
+        doc: "bi bi-file-earmark",
+        colSortable: "bi bi-chevron-expand",
+        // colSortable: "bi bi-arrow-down-up",
+        // colSortAsc: "bi bi-chevron-down",
+        // colSortDesc: "bi bi-chevron-up",
+        colSortAsc: "bi bi-arrow-down",
+        colSortDesc: "bi bi-arrow-up",
+        colFilter: "bi bi-filter-circle",
+        colFilterActive: "bi bi-filter-circle-fill wb-helper-invalid",
+        colMenu: "bi bi-three-dots-vertical",
+    },
+    fontawesome6: {
+        error: "fa-solid fa-triangle-exclamation",
+        loading: "fa-solid fa-chevron-right fa-beat",
+        noData: "fa-solid fa-circle-question",
+        expanderExpanded: "fa-solid fa-chevron-down",
+        expanderCollapsed: "fa-solid fa-chevron-right",
+        expanderLazy: "fa-solid fa-chevron-right wb-helper-lazy-expander",
+        checkChecked: "fa-regular fa-square-check",
+        checkUnchecked: "fa-regular fa-square",
+        checkUnknown: "fa-regular fa-square-minus",
+        radioChecked: "fa-solid fa-circle",
+        radioUnchecked: "fa-regular fa-circle",
+        radioUnknown: "fa-regular fa-circle-question",
+        folder: "fa-solid fa-folder-closed",
+        folderOpen: "fa-regular fa-folder-open",
+        folderLazy: "fa-solid fa-folder-plus",
+        doc: "fa-regular fa-file",
+        colSortable: "fa-solid fa-fw fa-sort",
+        colSortAsc: "fa-solid fa-fw fa-sort-up",
+        colSortDesc: "fa-solid fa-fw fa-sort-down",
+        colFilter: "fa-solid fa-fw fa-filter",
+        colFilterActive: "fa-solid fa-fw fa-filter wb-helper-invalid",
+        colMenu: "fa-solid fa-fw fa-ellipsis-v",
+    },
 };
 /** Dict keys that are evaluated by source loader (others are added to `tree.data` instead). */
 const RESERVED_TREE_SOURCE_KEYS = new Set([
-    "_format",
-    "_keyMap",
-    "_positional",
-    "_typeList",
-    "_version",
+    "_format", // reserved for future use
+    "_keyMap", // Used for compressed data format
+    "_positional", // Used for compressed data format
+    "_typeList", // Used for compressed data format @deprecated
+    "_valueMap", // Used for compressed data format
+    "_version", // reserved for future use
     "children",
     "columns",
     "types",
@@ -1942,8 +2111,8 @@ const KEY_TO_ACTION_DICT = {
     Home: "firstCol",
     "Control+End": "last",
     "Control+Home": "first",
-    "Meta+ArrowDown": "last",
-    "Meta+ArrowUp": "first",
+    "Meta+ArrowDown": "last", // macOs
+    "Meta+ArrowUp": "first", // macOs
     "*": "expandAll",
     Multiply: "expandAll",
     PageDown: "pageDown",
@@ -1961,7 +2130,7 @@ function makeNodeTitleMatcher(match) {
             return match.test(node.title);
         };
     }
-    assert(typeof match === "string");
+    assert(typeof match === "string", `Expected a string or RegExp: ${match}`);
     // s = escapeRegex(s.toLowerCase());
     return function (node) {
         return node.title === match;
@@ -1983,18 +2152,34 @@ function nodeTitleSorter(a, b) {
     const y = b.title.toLowerCase();
     return x === y ? 0 : x > y ? 1 : -1;
 }
+/**
+ * Convert 'flat' to 'nested' format.
+ *
+ *  Flat node entry format:
+ *    [PARENT_ID, [POSITIONAL_ARGS]]
+ *  or
+ *    [PARENT_ID, [POSITIONAL_ARGS], {KEY_VALUE_ARGS}]
+ *
+ * 1. Parent-referencing list is converted to a list of nested dicts with
+ *    optional `children` properties.
+ * 2. `[POSITIONAL_ARGS]` are added as dict attributes.
+ */
 function unflattenSource(source) {
     var _a, _b, _c;
-    const { _format, _keyMap, _positional, children } = source;
+    const { _format, _keyMap = {}, _positional = [], children } = source;
     if (_format !== "flat") {
         throw new Error(`Expected source._format: "flat", but got ${_format}`);
     }
     if (_positional && _positional.includes("children")) {
         throw new Error(`source._positional must not include "children": ${_positional}`);
     }
-    // Inverse keyMap:
-    let longToShort = {};
-    if (_keyMap) {
+    let longToShort = _keyMap;
+    if (_keyMap.t) {
+        // Inverse keyMap was used (pre 0.7.0)
+        // TODO: raise Error on final 1.x release
+        const msg = `source._keyMap maps from long to short since v0.7.0. Flip key/value!`;
+        console.warn(msg); // eslint-disable-line no-console
+        longToShort = {};
         for (const [key, value] of Object.entries(_keyMap)) {
             longToShort[value] = key;
         }
@@ -2005,16 +2190,16 @@ function unflattenSource(source) {
     const indexToNodeMap = {};
     const keyAttrName = (_a = longToShort["key"]) !== null && _a !== void 0 ? _a : "key";
     const childrenAttrName = (_b = longToShort["children"]) !== null && _b !== void 0 ? _b : "children";
-    for (const [index, node] of children.entries()) {
+    for (const [index, nodeTuple] of children.entries()) {
         // Node entry format:
         //   [PARENT_ID, [POSITIONAL_ARGS]]
         // or
         //   [PARENT_ID, [POSITIONAL_ARGS], {KEY_VALUE_ARGS}]
-        const [parentId, args, kwargs = {}] = node;
+        const [parentId, args, kwargs = {}] = nodeTuple;
         // Free up some memory as we go
-        node[1] = null;
-        if (node[2] != null) {
-            node[2] = null;
+        nodeTuple[1] = null;
+        if (nodeTuple[2] != null) {
+            nodeTuple[2] = null;
         }
         // console.log("flatten", parentId, args, kwargs)
         // We keep `kwargs` as our new node definition. Then we add all positional
@@ -2052,91 +2237,132 @@ function unflattenSource(source) {
             newChildren.push(kwargs);
         }
     }
-    delete source.children;
     source.children = newChildren;
 }
-function inflateSourceData(source) {
-    const { _format, _keyMap, _typeList } = source;
+/**
+ * Decompresses the source data by
+ * - converting from 'flat' to 'nested' format
+ * - expanding short alias names to long names (if defined in _keyMap)
+ * - resolving value indexes to value strings (if defined in _valueMap)
+ *
+ * @param source - The source object to be decompressed.
+ * @returns void
+ */
+function decompressSourceData(source) {
+    let { _format, _version = 1, _keyMap, _valueMap } = source;
+    assert(_version === 1, `Expected file version 1 instead of ${_version}`);
+    let longToShort = _keyMap;
+    let shortToLong = {};
+    if (longToShort) {
+        for (const [key, value] of Object.entries(longToShort)) {
+            shortToLong[value] = key;
+        }
+    }
+    // Fallback for old format (pre 0.7.0, using _keyMap in reverse direction)
+    // TODO: raise Error on final 1.x release
+    if (longToShort && longToShort.t) {
+        const msg = `source._keyMap maps from long to short since v0.7.0. Flip key/value!`;
+        console.warn(msg); // eslint-disable-line no-console
+        [longToShort, shortToLong] = [shortToLong, longToShort];
+    }
+    // Fallback for old format (pre 0.7.0, using _typeList instead of _valueMap)
+    // TODO: raise Error on final 1.x release
+    if (source._typeList != null) {
+        const msg = `source._typeList is deprecated since v0.7.0: use source._valueMap: {"type": [...]} instead.`;
+        if (_valueMap != null) {
+            throw new Error(msg);
+        }
+        else {
+            console.warn(msg); // eslint-disable-line no-console
+            _valueMap = { type: source._typeList };
+            delete source._typeList;
+        }
+    }
     if (_format === "flat") {
         unflattenSource(source);
     }
     delete source._format;
     delete source._version;
     delete source._keyMap;
-    delete source._typeList;
+    delete source._valueMap;
     delete source._positional;
     function _iter(childList) {
-        for (let node of childList) {
-            // Expand short alias names
-            if (_keyMap) {
-                // Iterate over a list of names, because we modify inside the loop:
-                Object.getOwnPropertyNames(node).forEach((propName) => {
-                    var _a;
-                    const long = (_a = _keyMap[propName]) !== null && _a !== void 0 ? _a : propName;
-                    if (long !== propName) {
-                        node[long] = node[propName];
+        for (const node of childList) {
+            // Iterate over a list of names, because we modify inside the loop
+            // (for ... of ... does not allow this)
+            Object.getOwnPropertyNames(node).forEach((propName) => {
+                const value = node[propName];
+                // Replace short names with long names if defined in _keyMap
+                let longName = propName;
+                if (_keyMap && shortToLong[propName] != null) {
+                    longName = shortToLong[propName];
+                    if (longName !== propName) {
+                        node[longName] = value;
                         delete node[propName];
                     }
-                });
-            }
-            // `node` now has long attribute names
-            // Resolve node type indexes
-            const type = node.type;
-            if (_typeList && type != null && typeof type === "number") {
-                const newType = _typeList[type];
-                if (newType == null) {
-                    throw new Error(`Expected typeList[${type}] entry in [${_typeList}]`);
                 }
-                node.type = newType;
-            }
+                // Replace type index with type name if defined in _valueMap
+                if (_valueMap &&
+                    typeof value === "number" &&
+                    _valueMap[longName] != null) {
+                    const newValue = _valueMap[longName][value];
+                    if (newValue == null) {
+                        throw new Error(`Expected valueMap[${longName}][${value}] entry in [${_valueMap[longName]}]`);
+                    }
+                    node[longName] = newValue;
+                }
+            });
             // Recursion
             if (node.children) {
                 _iter(node.children);
             }
         }
     }
-    _iter(source.children);
+    if (_keyMap || _valueMap) {
+        _iter(source.children);
+    }
 }
 
 /*!
  * Wunderbaum - ext-dnd
- * Copyright (c) 2021-2023, Martin Wendt. Released under the MIT license.
- * v0.4.0, Wed, 06 Sep 2023 08:21:56 GMT (https://github.com/mar10/wunderbaum)
+ * Copyright (c) 2021-2024, Martin Wendt. Released under the MIT license.
+ * v0.11.0, Sun, 04 Aug 2024 15:35:53 GMT (https://github.com/mar10/wunderbaum)
  */
 const nodeMimeType = "application/x-wunderbaum-node";
 class DndExtension extends WunderbaumExtension {
     constructor(tree) {
         super(tree, "dnd", {
-            autoExpandMS: 1500,
+            autoExpandMS: 1500, // Expand nodes after n milliseconds of hovering
             // dropMarkerInsertOffsetX: -16, // Additional offset for drop-marker with hitMode = "before"/"after"
             // dropMarkerOffsetX: -24, // Absolute position offset for .fancytree-drop-marker relatively to ..fancytree-title (icon/img near a node accepting drop)
             // #1021 `document.body` is not available yet
             // dropMarkerParent: "body", // Root Container used for drop marker (could be a shadow root)
-            multiSource: false,
-            effectAllowed: "all",
-            // dropEffect: "auto", // 'copy'|'link'|'move'|'auto'(calculate from `effectAllowed`+modifier keys) or callback(node, data) that returns such string.
-            dropEffectDefault: "move",
-            preventForeignNodes: false,
-            preventLazyParents: true,
-            preventNonNodes: false,
-            preventRecursion: true,
-            preventSameParent: false,
-            preventVoidMoves: true,
-            scroll: true,
-            scrollSensitivity: 20,
-            // scrollnterval: 50, // Generste event every 50 ms
-            scrollSpeed: 5,
+            multiSource: false, // true: Drag multiple (i.e. selected) nodes. Also a callback() is allowed
+            effectAllowed: "all", // Restrict the possible cursor shapes and modifier operations (can also be set in the dragStart event)
+            dropEffectDefault: "move", // Default dropEffect ('copy', 'link', or 'move') when no modifier is pressed (override in drag, dragOver).
+            guessDropEffect: true, // Calculate from `effectAllowed` and modifier keys)
+            preventForeignNodes: false, // Prevent dropping nodes from different Wunderbaum trees
+            preventLazyParents: true, // Prevent dropping items on unloaded lazy Wunderbaum tree nodes
+            preventNonNodes: false, // Prevent dropping items other than Wunderbaum tree nodes
+            preventRecursion: true, // Prevent dropping nodes on own descendants
+            preventSameParent: false, // Prevent dropping nodes under same direct parent
+            preventVoidMoves: true, // Prevent dropping nodes 'before self', etc. (move only)
+            serializeClipboardData: true, // Serialize node data to dataTransfer object
+            scroll: true, // Enable auto-scrolling while dragging
+            scrollSensitivity: 20, // Active top/bottom margin in pixel
+            // scrollnterval: 50, // Generate event every 50 ms
+            scrollSpeed: 5, // Scroll pixel per 50 ms
             // setTextTypeJson: false, // Allow dragging of nodes to different IE windows
-            sourceCopyHook: null,
+            sourceCopyHook: null, // Optional callback passed to `toDict` on dragStart @since 2.38
             // Events (drag support)
-            dragStart: null,
-            dragDrag: null,
-            dragEnd: null,
+            dragStart: null, // Callback(sourceNode, data), return true, to enable dnd drag
+            drag: null, // Callback(sourceNode, data)
+            dragEnd: null, // Callback(sourceNode, data)
             // Events (drop support)
-            dragEnter: null,
-            dragOver: null,
-            dragExpand: null,
-            dragDrop: null,
+            dragEnter: null, // Callback(targetNode, data), return true, to enable dnd drop
+            dragOver: null, // Callback(targetNode, data)
+            dragExpand: null, // Callback(targetNode, data), return false to prevent autoExpand
+            drop: null, // Callback(targetNode, data)
             dragLeave: null, // Callback(targetNode, data)
         });
         // public dropMarkerElem?: HTMLElement;
@@ -2147,7 +2373,7 @@ class DndExtension extends WunderbaumExtension {
         this.lastDropEffect = null;
         this.lastDropRegion = false;
         this.currentScrollDir = 0;
-        this.applyScrollDirThrottled = throttle(this.applyScrollDir, 50);
+        this.applyScrollDirThrottled = throttle(this._applyScrollDir, 50);
     }
     init() {
         super.init();
@@ -2195,7 +2421,9 @@ class DndExtension extends WunderbaumExtension {
         }
         throw new Error("Unsupported drop region definition: " + res);
     }
-    /** */
+    /**
+     * Calculates the drop region based on the drag event and the allowed drop regions.
+     */
     _calcDropRegion(e, allowed) {
         const dy = e.offsetY;
         if (!allowed) {
@@ -2217,8 +2445,68 @@ class DndExtension extends WunderbaumExtension {
         }
         // return "over";
     }
+    /**
+     * Guess drop effect (copy/link/move) using opinionated conventions.
+     *
+     * Default: dnd.dropEffectDefault
+     */
+    _guessDropEffect(e) {
+        // const nativeDropEffect = e.dataTransfer?.dropEffect;
+        var _a;
+        // if (nativeDropEffect && nativeDropEffect !== "none") {
+        //   return nativeDropEffect;
+        // }
+        const dndOpts = this.treeOpts.dnd;
+        const ea = (_a = dndOpts.effectAllowed) !== null && _a !== void 0 ? _a : "all";
+        const canCopy = ["all", "copy", "copyLink", "copyMove"].includes(ea);
+        const canLink = ["all", "link", "copyLink", "linkMove"].includes(ea);
+        const canMove = ["all", "move", "copyMove", "linkMove"].includes(ea);
+        let res = dndOpts.dropEffectDefault;
+        if (dndOpts.guessDropEffect) {
+            if (isMac) {
+                if (e.altKey && canCopy) {
+                    res = "copy";
+                }
+                if (e.metaKey && canMove) {
+                    res = "move"; // command key
+                }
+                if (e.altKey && e.metaKey && canLink) {
+                    res = "link";
+                }
+            }
+            else {
+                if (e.ctrlKey && canCopy) {
+                    res = "copy";
+                }
+                if (e.shiftKey && canMove) {
+                    res = "move";
+                }
+                if (e.altKey && canLink) {
+                    res = "link";
+                }
+            }
+        }
+        return res;
+    }
+    /** Don't allow void operation ('drop on self').*/
+    _isVoidDrop(targetNode, srcNode, dropRegion) {
+        // this.tree.logDebug(
+        //   `_isVoidDrop: ${srcNode} -> ${dropRegion} ${targetNode}`
+        // );
+        // TODO: should be checked on  move only
+        if (!this.treeOpts.dnd.preventVoidMoves || !srcNode) {
+            return false;
+        }
+        if ((dropRegion === "before" && targetNode === srcNode.getNextSibling()) ||
+            (dropRegion === "after" && targetNode === srcNode.getPrevSibling())) {
+            // this.tree.logDebug("Prevented before/after self");
+            return true;
+        }
+        // Don't allow dropping nodes on own parent (or self)
+        return srcNode === targetNode || srcNode.parent === targetNode;
+    }
     /* Implement auto scrolling when drag cursor is in top/bottom area of scroll parent. */
-    applyScrollDir() {
+    _applyScrollDir() {
         if (this.isDragging() && this.currentScrollDir) {
             const dndOpts = this.tree.options.dnd;
             const sp = this.tree.element; // scroll parent
@@ -2232,7 +2520,7 @@ class DndExtension extends WunderbaumExtension {
         }
     }
     /* Implement auto scrolling when drag cursor is in top/bottom area of scroll parent. */
-    autoScroll(viewportY) {
+    _autoScroll(viewportY) {
         const tree = this.tree;
         const dndOpts = tree.options.dnd;
         const sensitivity = dndOpts.scrollSensitivity;
@@ -2268,21 +2556,26 @@ class DndExtension extends WunderbaumExtension {
     isDragging() {
         return !!this.srcNode;
     }
+    /**
+     * Handle dragstart, drag and dragend events for the source node.
+     */
     onDragEvent(e) {
+        var _a;
         // const tree = this.tree;
         const dndOpts = this.treeOpts.dnd;
         const srcNode = Wunderbaum.getNode(e);
         if (!srcNode) {
+            this.tree.logWarn(`onDragEvent.${e.type}: no node`);
             return;
         }
-        if (e.type !== "drag") {
-            this.tree.logDebug("onDragEvent." + e.type + ", srcNode: " + srcNode, e);
+        if (["dragstart", "dragend"].includes(e.type)) {
+            this.tree.logDebug(`onDragEvent.${e.type} srcNode: ${srcNode}`, e);
         }
         // --- dragstart ---
         if (e.type === "dragstart") {
             // Set a default definition of allowed effects
             e.dataTransfer.effectAllowed = dndOpts.effectAllowed; //"copyMove"; // "all";
-            if (srcNode.isEditing()) {
+            if (srcNode.isEditingTitle()) {
                 srcNode.logDebug("Prevented dragging node in edit mode.");
                 e.preventDefault();
                 return false;
@@ -2293,16 +2586,24 @@ class DndExtension extends WunderbaumExtension {
                 e.preventDefault();
                 return false;
             }
-            let nodeData = srcNode.toDict(true, (n) => {
+            const nodeData = srcNode.toDict(true, (n) => {
                 // We don't want to re-use the key on drop:
-                n._org_key = n.key;
+                n._orgKey = n.key;
                 delete n.key;
             });
-            nodeData.treeId = srcNode.tree.id;
-            const json = JSON.stringify(nodeData);
-            e.dataTransfer.setData(nodeMimeType, json);
+            nodeData._treeId = srcNode.tree.id;
+            if (dndOpts.serializeClipboardData) {
+                if (typeof dndOpts.serializeClipboardData === "function") {
+                    e.dataTransfer.setData(nodeMimeType, dndOpts.serializeClipboardData(nodeData, srcNode));
+                }
+                else {
+                    e.dataTransfer.setData(nodeMimeType, JSON.stringify(nodeData));
+                }
+            }
             // e.dataTransfer!.setData("text/html", $(node.span).html());
-            e.dataTransfer.setData("text/plain", srcNode.title);
+            if (!((_a = e.dataTransfer) === null || _a === void 0 ? void 0 : _a.types.includes("text/plain"))) {
+                e.dataTransfer.setData("text/plain", srcNode.title);
+            }
             this.srcNode = srcNode;
             setTimeout(() => {
                 // Decouple this call, so the CSS is applied to the node, but not to
@@ -2311,39 +2612,52 @@ class DndExtension extends WunderbaumExtension {
             }, 0);
             // --- drag ---
         }
-        else if (e.type === "drag") ;
+        else if (e.type === "drag") {
+            if (dndOpts.drag) {
+                srcNode._callEvent("dnd.drag", { event: e });
+            }
+            // --- dragend ---
+        }
         else if (e.type === "dragend") {
             srcNode.setClass("wb-drag-source", false);
             this.srcNode = null;
             if (this.lastTargetNode) {
                 this._leaveNode();
             }
+            srcNode._callEvent("dnd.dragEnd", { event: e });
         }
         return true;
     }
+    /**
+     * Handle dragenter, dragover, dragleave, drop events.
+     */
     onDropEvent(e) {
+        var _a;
         // const isLink = event.dataTransfer.types.includes("text/uri-list");
         const srcNode = this.srcNode;
         const srcTree = srcNode ? srcNode.tree : null;
         const targetNode = Wunderbaum.getNode(e);
         const dndOpts = this.treeOpts.dnd;
         const dt = e.dataTransfer;
+        const dropRegion = this._calcDropRegion(e, this.lastAllowedDropRegions);
+        /** Helper to log a message if predicate is false. */
+        const _t = (pred, msg) => {
+            if (pred) {
+                this.tree.log(`Prevented drop operation (${msg}).`);
+            }
+            return pred;
+        };
         if (!targetNode) {
             this._leaveNode();
             return;
         }
-        if (!["dragenter", "dragover", "dragleave"].includes(e.type)) {
-            this.tree.logDebug("onDropEvent." +
-                e.type +
-                " targetNode: " +
-                targetNode +
-                ", ea: " +
-                (dt === null || dt === void 0 ? void 0 : dt.effectAllowed) +
-                ", de: " +
-                (dt === null || dt === void 0 ? void 0 : dt.dropEffect), ", cy: " + e.offsetY, ", r: " + this._calcDropRegion(e, this.lastAllowedDropRegions), e);
+        if (["drop"].includes(e.type)) {
+            this.tree.logDebug(`onDropEvent.${e.type} targetNode: ${targetNode}, ea: ${dt === null || dt === void 0 ? void 0 : dt.effectAllowed}, ` +
+                `de: ${dt === null || dt === void 0 ? void 0 : dt.dropEffect}, cy: ${e.offsetY}, r: ${dropRegion}, srcNode: ${srcNode}`, e);
         }
         // --- dragenter ---
         if (e.type === "dragenter") {
+            // this.tree.logWarn(` onDropEvent.${e.type} targetNode: ${targetNode}`, e);
             this.lastAllowedDropRegions = null;
             // `dragleave` is not reliable with event delegation, so we generate it
             // from dragenter:
@@ -2354,28 +2668,32 @@ class DndExtension extends WunderbaumExtension {
             this.lastEnterStamp = Date.now();
             if (
             // Don't drop on status node:
-            targetNode.isStatusNode() ||
+            _t(targetNode.isStatusNode(), "is status node") ||
                 // Prevent dropping nodes from different Wunderbaum trees:
-                (dndOpts.preventForeignNodes && targetNode.tree !== srcTree) ||
+                _t(dndOpts.preventForeignNodes && targetNode.tree !== srcTree, "preventForeignNodes") ||
                 // Prevent dropping items on unloaded lazy Wunderbaum tree nodes:
-                (dndOpts.preventLazyParents && !targetNode.isLoaded()) ||
+                _t(dndOpts.preventLazyParents && !targetNode.isLoaded(), "preventLazyParents") ||
                 // Prevent dropping items other than Wunderbaum tree nodes:
-                (dndOpts.preventNonNodes && !srcNode) ||
+                _t(dndOpts.preventNonNodes && !srcNode, "preventNonNodes") ||
                 // Prevent dropping nodes on own descendants:
-                (dndOpts.preventRecursion &&
-                    srcNode &&
-                    srcNode.isAncestorOf(targetNode)) ||
+                _t(dndOpts.preventRecursion && (srcNode === null || srcNode === void 0 ? void 0 : srcNode.isAncestorOf(targetNode)), "preventRecursion") ||
                 // Prevent dropping nodes under same direct parent:
-                (dndOpts.preventSameParent &&
+                _t(dndOpts.preventSameParent &&
                     srcNode &&
-                    targetNode.parent === srcNode.parent) ||
-                // Don't allow void operation ('drop on self'): TODO: should be checke onn  move only
-                (dndOpts.preventVoidMoves && targetNode === srcNode)) {
+                    targetNode.parent === srcNode.parent, "preventSameParent") ||
+                // Don't allow void operation ('drop on self'): TODO: should be checked on  move only
+                _t(dndOpts.preventVoidMoves && targetNode === srcNode, "preventVoidMoves")) {
                 dt.dropEffect = "none";
+                // this.tree.log("Prevented drop operation");
                 return true; // Prevent drop operation
             }
             // User may return a set of regions (or `false` to prevent drop)
-            let regionSet = targetNode._callEvent("dnd.dragEnter", { event: e });
+            // Figure out a drop effect (copy/link/move) using opinated conventions.
+            dt.dropEffect = this._guessDropEffect(e) || "none";
+            let regionSet = targetNode._callEvent("dnd.dragEnter", {
+                event: e,
+                sourceNode: srcNode,
+            });
             //
             regionSet = this.unifyDragover(regionSet);
             if (!regionSet) {
@@ -2391,47 +2709,69 @@ class DndExtension extends WunderbaumExtension {
         }
         else if (e.type === "dragover") {
             const viewportY = e.clientY - this.tree.element.offsetTop;
-            this.autoScroll(viewportY);
+            this._autoScroll(viewportY);
+            dt.dropEffect = this._guessDropEffect(e) || "none";
+            targetNode._callEvent("dnd.dragOver", { event: e, sourceNode: srcNode });
             const region = this._calcDropRegion(e, this.lastAllowedDropRegions);
             this.lastDropRegion = region;
+            this.lastDropEffect = dt.dropEffect;
             if (dndOpts.autoExpandMS > 0 &&
                 targetNode.isExpandable(true) &&
                 !targetNode._isLoading &&
                 Date.now() - this.lastEnterStamp > dndOpts.autoExpandMS &&
-                targetNode._callEvent("dnd.dragExpand", { event: e }) !== false) {
+                targetNode._callEvent("dnd.dragExpand", {
+                    event: e,
+                    sourceNode: srcNode,
+                }) !== false) {
                 targetNode.setExpanded();
             }
-            if (!region) {
+            if (!region || this._isVoidDrop(targetNode, srcNode, region)) {
                 return; // We already rejected in dragenter
             }
             targetNode.setClass("wb-drop-over", region === "over");
             targetNode.setClass("wb-drop-before", region === "before");
             targetNode.setClass("wb-drop-after", region === "after");
-            // console.log("dragover", e);
-            // dt.dropEffect = this.lastDropEffect!;
             e.preventDefault(); // Allow drop (Drop operation is denied by default)
             return false;
             // --- dragleave ---
         }
-        else if (e.type === "dragleave") ;
+        else if (e.type === "dragleave") {
+            // NOTE: we cannot trust this event, since it is always fired,
+            // Instead we remove the marker on dragenter
+            targetNode._callEvent("dnd.dragLeave", { event: e, sourceNode: srcNode });
+            // --- drop ---
+        }
         else if (e.type === "drop") {
             e.stopPropagation(); // prevent browser from opening links?
+            e.preventDefault(); // #69 prevent iOS browser from opening links
             this._leaveNode();
             const region = this.lastDropRegion;
-            targetNode._callEvent("dnd.drop", {
-                event: e,
-                region: region,
-                defaultDropMode: region === "over" ? "appendChild" : region,
-                sourceNode: this.srcNode,
-            });
+            let nodeData = (_a = e.dataTransfer) === null || _a === void 0 ? void 0 : _a.getData(nodeMimeType);
+            nodeData = nodeData ? JSON.parse(nodeData) : null;
+            const srcNode = this.srcNode;
+            const lastDropEffect = this.lastDropEffect;
+            setTimeout(() => {
+                // Decouple this call, because drop actions may prevent the dragend event
+                // from being fired on some browsers
+                targetNode._callEvent("dnd.drop", {
+                    event: e,
+                    region: region,
+                    suggestedDropMode: region === "over" ? "appendChild" : region,
+                    suggestedDropEffect: lastDropEffect,
+                    // suggestedDropEffect: e.dataTransfer?.dropEffect,
+                    sourceNode: srcNode,
+                    sourceNodeData: nodeData,
+                });
+            }, 10);
         }
+        return false;
     }
 }
 
 /*!
  * Wunderbaum - drag_observer
- * Copyright (c) 2021-2023, Martin Wendt. Released under the MIT license.
- * v0.4.0, Wed, 06 Sep 2023 08:21:56 GMT (https://github.com/mar10/wunderbaum)
+ * Copyright (c) 2021-2024, Martin Wendt. Released under the MIT license.
+ * v0.11.0, Sun, 04 Aug 2024 15:35:53 GMT (https://github.com/mar10/wunderbaum)
  */
 /**
  * Convert mouse- and touch events to 'dragstart', 'drag', and 'dragstop'.
@@ -2439,6 +2779,7 @@ class DndExtension extends WunderbaumExtension {
 class DragObserver {
     constructor(opts) {
         this.start = {
+            event: null,
             x: 0,
             y: 0,
             altKey: false,
@@ -2448,6 +2789,7 @@ class DragObserver {
         };
         this.dragElem = null;
         this.dragging = false;
+        this.customData = {};
         // TODO: touch events
         this.events = ["mousedown", "mouseup", "mousemove", "keydown"];
         if (!opts.root) {
@@ -2475,22 +2817,32 @@ class DragObserver {
     stopDrag(cb_event) {
         if (this.dragging && this.opts.dragstop && cb_event) {
             cb_event.type = "dragstop";
-            this.opts.dragstop(cb_event);
+            try {
+                this.opts.dragstop(cb_event);
+            }
+            catch (err) {
+                console.error("dragstop error", err); // eslint-disable-line no-console
+            }
         }
         this.dragElem = null;
         this.dragging = false;
+        this.start.event = null;
+        this.customData = {};
     }
     handleEvent(e) {
         const type = e.type;
         const opts = this.opts;
         const cb_event = {
             type: e.type,
+            startEvent: type === "mousedown" ? e : this.start.event,
             event: e,
+            customData: this.customData,
             dragElem: this.dragElem,
             dx: e.pageX - this.start.x,
             dy: e.pageY - this.start.y,
             apply: undefined,
         };
+        // console.log("handleEvent", type, cb_event);
         switch (type) {
             case "keydown":
                 this.stopDrag(cb_event);
@@ -2515,6 +2867,7 @@ class DragObserver {
                         }
                     }
                 }
+                this.start.event = e;
                 this.start.x = e.pageX;
                 this.start.y = e.pageY;
                 this.start.altKey = e.altKey;
@@ -2566,8 +2919,8 @@ class DragObserver {
 
 /*!
  * Wunderbaum - ext-grid
- * Copyright (c) 2021-2023, Martin Wendt. Released under the MIT license.
- * v0.4.0, Wed, 06 Sep 2023 08:21:56 GMT (https://github.com/mar10/wunderbaum)
+ * Copyright (c) 2021-2024, Martin Wendt. Released under the MIT license.
+ * v0.11.0, Sun, 04 Aug 2024 15:35:53 GMT (https://github.com/mar10/wunderbaum)
  */
 class GridExtension extends WunderbaumExtension {
     constructor(tree) {
@@ -2576,11 +2929,43 @@ class GridExtension extends WunderbaumExtension {
         });
         this.observer = new DragObserver({
             root: window.document,
-            selector: "span.wb-col-resizer",
+            selector: "span.wb-col-resizer-active",
             thresh: 4,
             // throttle: 400,
             dragstart: (e) => {
-                return this.tree.element.contains(e.dragElem);
+                const info = Wunderbaum.getEventInfo(e.startEvent);
+                const colDef = info.colDef;
+                const allow = colDef &&
+                    this.tree.element.contains(e.dragElem) &&
+                    toBool(colDef.resizable, tree.options.columnsResizable, false);
+                // this.tree.log("dragstart", colDef, e, info);
+                this.tree.element.classList.toggle("wb-col-resizing", !!allow);
+                info.colElem.classList.toggle("wb-col-resizing", !!allow);
+                // We start dagging, so we remember the actual width in *pixels*
+                // (which may be 'auto' or '100%').
+                // Since we we re-create the markup on each update, we also cannot store
+                // the original event or DOM element, but only the colDef object.
+                if (allow) {
+                    // Store initial target column infos in customData
+                    e.customData.colDef = colDef;
+                    e.customData.orgCustomWidthPx = colDef.customWidthPx;
+                    const curWidthPx = Number.parseInt(info.colElem.style.width, 10);
+                    e.customData.orgWidthPx = curWidthPx;
+                    // Set custom width to current width, so that we can modify it
+                    colDef.customWidthPx = curWidthPx;
+                    // this.tree.log(
+                    //   `dragstart customWidthPx=${colDef.customWidthPx}`,
+                    //   e,
+                    //   info
+                    // );
+                    this.tree.update(ChangeType.colStructure);
+                    // this.tree.log(
+                    //   `dragstart 2 customWidthPx=${colDef.customWidthPx}`,
+                    //   e,
+                    //   info
+                    // );
+                }
+                return allow;
             },
             drag: (e) => {
                 // TODO: throttle
@@ -2594,17 +2979,39 @@ class GridExtension extends WunderbaumExtension {
     init() {
         super.init();
     }
+    /**
+     * Hanldes drag and sragstop events for column resizing.
+     */
     handleDrag(e) {
-        const info = Wunderbaum.getEventInfo(e.event);
-        // this.tree.options.
-        this.tree.log(`${e.type}(${e.dx})`, e, info);
+        const custom = e.customData;
+        const colDef = custom.colDef;
+        // this.tree.log(`${e.type} (dx=${e.dx})`, e, info);
+        if (e.type === "dragstop" || e.type === "drag") {
+            this.tree.element.classList.remove("wb-col-resizing");
+            // info.colElem!.classList.remove("wb-col-resizing");
+            if (e.apply || e.type === "drag") {
+                const minWidth = toPixel(colDef.minWidth, DEFAULT_MIN_COL_WIDTH);
+                const newWidth = Math.max(minWidth, custom.orgWidthPx + e.dx);
+                colDef.customWidthPx = newWidth;
+                // this.tree.log(
+                //   `${e.type} minWidth=${minWidth}, newWidth=${newWidth}`,
+                //   colDef
+                // );
+            }
+            else {
+                // Drag was cancelled
+                this.tree.log("Column resize cancelled", e);
+                colDef.customWidthPx = custom.orgCustomWidthPx; // Restore original width or undefined
+            }
+            this.tree.update(ChangeType.colStructure);
+        }
     }
 }
 
 /*!
  * Wunderbaum - deferred
- * Copyright (c) 2021-2023, Martin Wendt. Released under the MIT license.
- * v0.4.0, Wed, 06 Sep 2023 08:21:56 GMT (https://github.com/mar10/wunderbaum)
+ * Copyright (c) 2021-2024, Martin Wendt. Released under the MIT license.
+ * v0.11.0, Sun, 04 Aug 2024 15:35:53 GMT (https://github.com/mar10/wunderbaum)
  */
 /**
  * Implement a ES6 Promise, that exposes a resolve() and reject() method.
@@ -2628,27 +3035,27 @@ class Deferred {
             this._reject = reject;
         });
     }
-    /** Resolve the [[Promise]]. */
+    /** Resolve the Promise. */
     resolve(value) {
         this._resolve(value);
     }
-    /** Reject the [[Promise]]. */
+    /** Reject the Promise. */
     reject(reason) {
         this._reject(reason);
     }
-    /** Return the native [[Promise]] instance.*/
+    /** Return the native Promise instance.*/
     promise() {
         return this._promise;
     }
-    /** Call [[Promise.then]] on the embedded promise instance.*/
+    /** Call Promise.then on the embedded promise instance.*/
     then(cb) {
         return this._promise.then(cb);
     }
-    /** Call [[Promise.catch]] on the embedded promise instance.*/
+    /** Call Promise.catch on the embedded promise instance.*/
     catch(cb) {
         return this._promise.catch(cb);
     }
-    /** Call [[Promise.finally]] on the embedded promise instance.*/
+    /** Call Promise.finally on the embedded promise instance.*/
     finally(cb) {
         return this._promise.finally(cb);
     }
@@ -2656,8 +3063,8 @@ class Deferred {
 
 /*!
  * Wunderbaum - wunderbaum_node
- * Copyright (c) 2021-2023, Martin Wendt. Released under the MIT license.
- * v0.4.0, Wed, 06 Sep 2023 08:21:56 GMT (https://github.com/mar10/wunderbaum)
+ * Copyright (c) 2021-2024, Martin Wendt. Released under the MIT license.
+ * v0.11.0, Sun, 04 Aug 2024 15:35:53 GMT (https://github.com/mar10/wunderbaum)
  */
 /** WunderbaumNode properties that can be passed with source data.
  * (Any other source properties will be stored as `node.data.PROP`.)
@@ -2679,16 +3086,12 @@ const NODE_PROPS = new Set([
     "tooltip",
     "type",
     "unselectable",
-    // "unselectableIgnore",
-    // "unselectableStatus",
 ]);
 /** WunderbaumNode properties that will be returned by `node.toDict()`.)
  */
 const NODE_DICT_PROPS = new Set(NODE_PROPS);
 NODE_DICT_PROPS.delete("_partsel");
 NODE_DICT_PROPS.delete("unselectable");
-// NODE_DICT_PROPS.delete("unselectableIgnore");
-// NODE_DICT_PROPS.delete("unselectableStatus");
 /**
  * A single tree node.
  *
@@ -2704,14 +3107,13 @@ class WunderbaumNode {
          * @see Use {@link setKey} to modify.
          */
         this.refKey = undefined;
+        /**
+         * Array of child nodes (null for leaf nodes).
+         * For lazy nodes, this is `null` or ùndefined` until the children are loaded
+         * and leaf nodes may be `[]` (empty array).
+         * @see {@link hasChildren}, {@link addChildren}, {@link lazy}.
+         */
         this.children = null;
-        this.lazy = false;
-        /** Expansion state.
-         * @see {@link isExpandable}, {@link isExpanded}, {@link setExpanded}. */
-        this.expanded = false;
-        /** Selection state.
-         * @see {@link isSelected}, {@link setSelected}, {@link toggleSelected}. */
-        this.selected = false;
         /** Additional classes added to `div.wb-row`.
          * @see {@link hasClass}, {@link setClass}. */
         this.classes = null; //new Set<string>();
@@ -2725,8 +3127,8 @@ class WunderbaumNode {
         this.subMatchCount = 0;
         this._rowIdx = 0;
         this._rowElem = undefined;
-        assert(!parent || parent.tree === tree);
-        assert(!data.children);
+        assert(!parent || parent.tree === tree, `Invalid parent: ${parent}`);
+        assert(!data.children, "'children' not allowed here");
         this.tree = tree;
         this.parent = parent;
         this.key = "" + ((_a = data.key) !== null && _a !== void 0 ? _a : ++WunderbaumNode.sequence);
@@ -2737,7 +3139,7 @@ class WunderbaumNode {
         data.icon != null ? (this.icon = data.icon) : 0;
         this.lazy = data.lazy === true;
         data.statusNodeType != null
-            ? (this.statusNodeType = "" + data.statusNodeType)
+            ? (this.statusNodeType = ("" + data.statusNodeType))
             : 0;
         data.colspan != null ? (this.colspan = !!data.colspan) : 0;
         // Selection
@@ -2745,10 +3147,6 @@ class WunderbaumNode {
         data.radiogroup != null ? (this.radiogroup = !!data.radiogroup) : 0;
         this.selected = data.selected === true;
         data.unselectable === true ? (this.unselectable = true) : 0;
-        // data.unselectableStatus != null
-        //   ? (this.unselectableStatus = !!data.unselectableStatus)
-        //   : 0;
-        // data.unselectableIgnore === true ? (this.unselectableIgnore = true) : 0;
         if (data.classes) {
             this.setClass(data.classes);
         }
@@ -2821,7 +3219,8 @@ class WunderbaumNode {
      * ```
      */
     _callEvent(type, extra) {
-        return this.tree._callEvent(type, extend({
+        var _a;
+        return (_a = this.tree) === null || _a === void 0 ? void 0 : _a._callEvent(type, extend({
             node: this,
             typeInfo: this.type ? this.tree.types[this.type] : {},
         }, extra));
@@ -2846,7 +3245,7 @@ class WunderbaumNode {
                 nodeData = [nodeData];
             }
             const forceExpand = applyMinExpanLevel && _level < tree.options.minExpandLevel;
-            for (let child of nodeData) {
+            for (const child of nodeData) {
                 const subChildren = child.children;
                 delete child.children;
                 const n = new WunderbaumNode(tree, this, child);
@@ -2867,7 +3266,7 @@ class WunderbaumNode {
             else {
                 // Returns null if before is not a direct child:
                 before = this.findDirectChild(before);
-                let pos = this.children.indexOf(before);
+                const pos = this.children.indexOf(before);
                 assert(pos >= 0, `options.before must be a direct child of ${this}`);
                 // insert nodeList after children[pos]
                 this.children.splice(pos, 0, ...nodeList);
@@ -2880,7 +3279,7 @@ class WunderbaumNode {
             //   if (this.parent && this.parent.children) {
             //     this.fixSelection3FromEndNodes();
             //   } else {
-            //     // my happen when loading __root__;
+            //     // may happen when loading __root__;
             //   }
             // }
             tree.enableUpdate(true);
@@ -2917,7 +3316,7 @@ class WunderbaumNode {
             case "appendChild":
                 return this.addChildren(nodeData);
         }
-        assert(false, "Invalid mode: " + mode);
+        assert(false, `Invalid mode: ${mode}`);
         return undefined;
     }
     /**
@@ -2933,7 +3332,7 @@ class WunderbaumNode {
      * (Automatically called when `autoCollapse` is true.)
      */
     collapseSiblings(options) {
-        for (let node of this.parent.children) {
+        for (const node of this.parent.children) {
             if (node !== this && node.expanded) {
                 node.setExpanded(false, options);
             }
@@ -2973,13 +3372,17 @@ class WunderbaumNode {
             }
         }
     }
+    /** Start editing this node's title. */
+    startEditTitle() {
+        this.tree._callMethod("edit.startEditTitle", this);
+    }
     /** Call `setExpanded()` on all descendant nodes. */
     async expandAll(flag = true, options) {
         const tree = this.tree;
         const minExpandLevel = this.tree.options.minExpandLevel;
-        let { depth = 99, loadLazy, force } = options !== null && options !== void 0 ? options : {};
+        const { depth = 99, loadLazy, force, keepActiveNodeVisible = true, } = options !== null && options !== void 0 ? options : {};
         const expandOpts = {
-            scrollIntoView: false,
+            scrollIntoView: false, // don't scroll very node on iteration
             force: force,
             loadLazy: loadLazy,
         };
@@ -3038,6 +3441,9 @@ class WunderbaumNode {
             tree.enableUpdate(true);
             tree.logTimeEnd(tag);
         }
+        if (tree.activeNode && keepActiveNodeVisible) {
+            tree.activeNode.scrollIntoView();
+        }
     }
     /**
      * Find all descendant nodes that match condition (excluding self).
@@ -3075,9 +3481,10 @@ class WunderbaumNode {
     }
     /** Return the direct child with a given key, index or null. */
     findDirectChild(ptr) {
-        let cl = this.children;
-        if (!cl)
+        const cl = this.children;
+        if (!cl) {
             return null;
+        }
         if (typeof ptr === "string") {
             for (let i = 0, l = cl.length; i < l; i++) {
                 if (cl[i].key === ptr) {
@@ -3140,7 +3547,7 @@ class WunderbaumNode {
             return parts.join("");
         };
         yield name_cb(this);
-        for (let node of this) {
+        for (const node of this) {
             yield _format_line(node);
         }
     }
@@ -3162,7 +3569,7 @@ class WunderbaumNode {
      */
     format(name_cb, connectors) {
         const a = [];
-        for (let line of this.format_iter(name_cb, connectors)) {
+        for (const line of this.format_iter(name_cb, connectors)) {
             a.push(line);
         }
         return a.join("\n");
@@ -3177,6 +3584,22 @@ class WunderbaumNode {
         }
         const colElems = (_a = this._rowElem) === null || _a === void 0 ? void 0 : _a.querySelectorAll("span.wb-col");
         return colElems ? colElems[colIdx] : null;
+    }
+    /**
+     * Return all nodes with the same refKey.
+     *
+     * @param includeSelf Include this node itself.
+     * @see {@link Wunderbaum.findByRefKey}
+     */
+    getCloneList(includeSelf = false) {
+        if (!this.refKey) {
+            return [];
+        }
+        const clones = this.tree.findByRefKey(this.refKey);
+        if (includeSelf) {
+            return clones;
+        }
+        return [...clones].filter((n) => n !== this);
     }
     /** Return the first child node or null.
      * @returns {WunderbaumNode | null}
@@ -3201,8 +3624,8 @@ class WunderbaumNode {
     }
     /** Return the successive node (under the same parent) or null. */
     getNextSibling() {
-        let ac = this.parent.children;
-        let idx = ac.indexOf(this);
+        const ac = this.parent.children;
+        const idx = ac.indexOf(this);
         return ac[idx + 1] || null;
     }
     /** Return the parent node (null for the system root node). */
@@ -3215,7 +3638,8 @@ class WunderbaumNode {
      * @param includeSelf Include the node itself.
      */
     getParentList(includeRoot = false, includeSelf = false) {
-        let l = [], dtn = includeSelf ? this : this.parent;
+        const l = [];
+        let dtn = includeSelf ? this : this.parent;
         while (dtn) {
             if (includeRoot || dtn.parent) {
                 l.unshift(dtn);
@@ -3226,14 +3650,16 @@ class WunderbaumNode {
     }
     /** Return a string representing the hierachical node path, e.g. "a/b/c".
      * @param includeSelf
-     * @param node property name or callback
+     * @param part property name or callback
      * @param separator
      */
     getPath(includeSelf = true, part = "title", separator = "/") {
         // includeSelf = includeSelf !== false;
         // part = part || "title";
         // separator = separator || "/";
-        let val, path = [], isFunc = typeof part === "function";
+        let val;
+        const path = [];
+        const isFunc = typeof part === "function";
         this.visitParents((n) => {
             if (n.parent) {
                 val = isFunc
@@ -3247,8 +3673,8 @@ class WunderbaumNode {
     }
     /** Return the preceeding node (under the same parent) or null. */
     getPrevSibling() {
-        let ac = this.parent.children;
-        let idx = ac.indexOf(this);
+        const ac = this.parent.children;
+        const idx = ac.indexOf(this);
         return ac[idx - 1] || null;
     }
     /** Return true if node has children.
@@ -3274,21 +3700,30 @@ class WunderbaumNode {
     hasClass(className) {
         return this.classes ? this.classes.has(className) : false;
     }
+    /** Return true if node ist the currently focused node. @since 0.9.0 */
+    hasFocus() {
+        return this.tree.focusNode === this;
+    }
     /** Return true if this node is the currently active tree node. */
     isActive() {
         return this.tree.activeNode === this;
     }
     /** Return true if this node is a direct or indirect parent of `other`.
-     * (See also [[isParentOf]].)
+     * @see {@link WunderbaumNode.isParentOf}
      */
     isAncestorOf(other) {
         return other && other.isDescendantOf(this);
     }
     /** Return true if this node is a **direct** subnode of `other`.
-     * (See also [[isDescendantOf]].)
+     * @see {@link WunderbaumNode.isDescendantOf}
      */
     isChildOf(other) {
         return other && this.parent === other;
+    }
+    /** Return true if this node's refKey is used by at least one other node.
+     */
+    isClone() {
+        return !!this.refKey && this.tree.findByRefKey(this.refKey).length > 1;
     }
     /** Return true if this node's title spans all columns, i.e. the node has no
      * grid cells.
@@ -3297,13 +3732,13 @@ class WunderbaumNode {
         return !!this.getOption("colspan");
     }
     /** Return true if this node is a direct or indirect subnode of `other`.
-     * (See also [[isChildOf]].)
+     * @see {@link WunderbaumNode.isChildOf}
      */
     isDescendantOf(other) {
         if (!other || other.tree !== this.tree) {
             return false;
         }
-        var p = this.parent;
+        let p = this.parent;
         while (p) {
             if (p === other) {
                 return true;
@@ -3325,15 +3760,18 @@ class WunderbaumNode {
             return false;
         }
         if (this.children == null) {
-            return this.lazy; // null or undefined can trigger lazy load
+            return !!this.lazy; // null or undefined can trigger lazy load
         }
         if (this.children.length === 0) {
             return !!this.tree.options.emptyChildListExpandable;
         }
         return true;
     }
-    /** Return true if this node is currently in edit-title mode. */
-    isEditing() {
+    /** Return true if _this_ node is currently in edit-title mode.
+     *
+     * See {@link WunderbaumNode.startEditTitle}.
+     */
+    isEditingTitle() {
         return this.tree._callMethod("edit.isEditingTitle", this);
     }
     /** Return true if this node is currently expanded. */
@@ -3342,12 +3780,12 @@ class WunderbaumNode {
     }
     /** Return true if this node is the first node of its parent's children. */
     isFirstSibling() {
-        var p = this.parent;
+        const p = this.parent;
         return !p || p.children[0] === this;
     }
     /** Return true if this node is the last node of its parent's children. */
     isLastSibling() {
-        var p = this.parent;
+        const p = this.parent;
         return !p || p.children[p.children.length - 1] === this;
     }
     /** Return true if this node is lazy (even if data was already loaded) */
@@ -3367,7 +3805,7 @@ class WunderbaumNode {
         return this.statusNodeType === "paging";
     }
     /** Return true if this node is a **direct** parent of `other`.
-     * (See also [[isAncestorOf]].)
+     * @see {@link WunderbaumNode.isAncestorOf}
      */
     isParentOf(other) {
         return other && other.parent === this;
@@ -3381,11 +3819,15 @@ class WunderbaumNode {
         return !this.selected && !!this._partsel;
     }
     /** Return true if this node has DOM representaion, i.e. is displayed in the viewport. */
+    isRadio() {
+        return !!this.parent.radiogroup || this.getOption("checkbox") === "radio";
+    }
+    /** Return true if this node has DOM representaion, i.e. is displayed in the viewport. */
     isRendered() {
         return !!this._rowElem;
     }
     /** Return true if this node is the (invisible) system root node.
-     * (See also [[isTopLevel()]].)
+     * @see {@link WunderbaumNode.isTopLevel}
      */
     isRootNode() {
         return this.tree.root === this;
@@ -3417,7 +3859,8 @@ class WunderbaumNode {
      * whether the node is scrolled into the visible part of the screen or viewport.
      */
     isVisible() {
-        let i, l, n, hasFilter = this.tree.filterMode === "hide", parents = this.getParentList(false, false);
+        const hasFilter = this.tree.filterMode === "hide";
+        const parents = this.getParentList(false, false);
         // TODO: check $(n.span).is(":visible")
         // i.e. return false for nodes (but not parents) that are hidden
         // by a filter
@@ -3425,8 +3868,8 @@ class WunderbaumNode {
             // this.debug( "isVisible: HIDDEN (" + hasFilter + ", " + this.match + ", " + this.match + ")" );
             return false;
         }
-        for (i = 0, l = parents.length; i < l; i++) {
-            n = parents[i];
+        for (let i = 0, l = parents.length; i < l; i++) {
+            const n = parents[i];
             if (!n.expanded) {
                 // this.debug("isVisible: HIDDEN (parent collapsed)");
                 return false;
@@ -3451,11 +3894,11 @@ class WunderbaumNode {
         if (isArray(source)) {
             source = { children: source };
         }
-        assert(isPlainObject(source));
+        assert(isPlainObject(source), `Expected an array or plain object: ${source}`);
         const format = (_a = source.format) !== null && _a !== void 0 ? _a : "nested";
-        assert(format === "nested" || format === "flat");
+        assert(format === "nested" || format === "flat", `Expected source.format = 'nested' or 'flat': ${format}`);
         // Pre-rocess for 'nested' or 'flat' format
-        inflateSourceData(source);
+        decompressSourceData(source);
         assert(source.children, "If `source` is an object, it must have a `children` property");
         if (source.types) {
             tree.logInfo("Redefine types", source.columns);
@@ -3473,12 +3916,14 @@ class WunderbaumNode {
         for (const [key, value] of Object.entries(source)) {
             if (!RESERVED_TREE_SOURCE_KEYS.has(key)) {
                 tree.data[key] = value;
-                tree.logDebug(`Add source.${key} to tree.data.${key}`);
+                // tree.logDebug(`Add source.${key} to tree.data.${key}`);
             }
         }
         if (tree.options.selectMode === "hier") {
             this.fixSelection3FromEndNodes();
         }
+        // Allow to un-sort nodes after sorting
+        this.resetNativeChildOrder();
         this._callEvent("load");
     }
     async _fetchWithOptions(source) {
@@ -3494,6 +3939,7 @@ class WunderbaumNode {
         else if (isPlainObject(source)) {
             // source is a plain object with `.url` property.
             ({ url, params, body, options, ...rest } = source);
+            assert(!rest || Object.keys(rest).length === 0, `Unexpected source properties: ${Object.keys(rest)}. Use 'options' instead.`);
             assert(typeof url === "string", `expected source.url as string`);
             if (isPlainObject(options)) {
                 fetchOpts = options;
@@ -3535,10 +3981,15 @@ class WunderbaumNode {
         this._requestId = requestId;
         // const timerLabel = tree.logTime(this + ".load()");
         try {
-            let url = typeof source === "string" ? source : source.url;
+            const url = typeof source === "string" ? source : source.url;
             if (!url) {
                 // An array or a plain object (that does NOT contain a `.url` property)
                 // will be treated as native Wunderbaum data
+                if (typeof source.then === "function") {
+                    const msg = tree.logTime(`Resolve thenable ${source}`);
+                    source = await Promise.resolve(source);
+                    tree.logTimeEnd(msg);
+                }
                 this._loadSourceObject(source);
                 elapProcess = Date.now() - start;
             }
@@ -3580,17 +4031,26 @@ class WunderbaumNode {
             this._requestId = 0;
             elap = Date.now() - start;
             if (tree.options.debugLevel >= 3) {
-                tree.logInfo(`Load source took ${elap / 1000} seconds (transfer: ${elapLoad / 1000}s, processing: ${elapProcess / 1000}s)`);
+                tree.logInfo(`Load source took ${elap / 1000} seconds ` +
+                    `(transfer: ${elapLoad / 1000}s, ` +
+                    `processing: ${elapProcess / 1000}s)`);
             }
         }
     }
-    /**Load content of a lazy node. */
+    /**
+     * Load content of a lazy node.
+     * If the node is already loaded, nothing happens.
+     * @param [forceReload=false] If true, reload even if already loaded.
+     */
     async loadLazy(forceReload = false) {
         const wasExpanded = this.expanded;
         assert(this.lazy, "load() requires a lazy node");
-        // _assert( forceReload || this.isUndefined(), "Pass forceReload=true to re-load a lazy node" );
         if (!forceReload && !this.isUnloaded()) {
-            return;
+            return; // Already loaded: nothing to do
+        }
+        if (this.isLoading()) {
+            this.logWarn("loadLazy() called while already loading: ignored.");
+            return; // Already loading: prevent duplicate requests
         }
         if (this.isLoaded()) {
             this.resetLazy(); // Also collapses if currently expanded
@@ -3605,7 +4065,8 @@ class WunderbaumNode {
                 return;
             }
             assert(isArray(source) || (source && source.url), "The lazyLoad event must return a node list, `{url: ...}`, or false.");
-            await this.load(source); // also calls setStatus('ok')
+            await this.load(source);
+            this.setStatus(NodeStatusType.ok); // Also resets `this._isLoading`
             if (wasExpanded) {
                 this.expanded = true;
                 this.tree.update(ChangeType.structure);
@@ -3617,40 +4078,44 @@ class WunderbaumNode {
         catch (e) {
             this.logError("Error during loadLazy()", e);
             this._callEvent("error", { error: e });
+            // Also resets `this._isLoading`:
             this.setStatus(NodeStatusType.error, { message: "" + e });
         }
         return;
     }
-    /** Alias for `logDebug` */
+    /** Write to `console.log` with node name as prefix if opts.debugLevel >= 4.
+     * @see {@link WunderbaumNode.logDebug}
+     */
     log(...args) {
-        this.logDebug.apply(this, args);
+        if (this.tree.options.debugLevel >= 4) {
+            console.log(this.toString(), ...args); // eslint-disable-line no-console
+        }
     }
-    /* Log to console if opts.debugLevel >= 4 */
+    /** Write to `console.debug` with node name as prefix if opts.debugLevel >= 4
+     * and browser console level includes debug/verbose messages.
+     * @see {@link WunderbaumNode.log}
+     */
     logDebug(...args) {
         if (this.tree.options.debugLevel >= 4) {
-            Array.prototype.unshift.call(args, this.toString());
-            console.log.apply(console, args);
+            console.debug(this.toString(), ...args); // eslint-disable-line no-console
         }
     }
-    /* Log error to console. */
+    /** Write to `console.error` with node name as prefix if opts.debugLevel >= 1. */
     logError(...args) {
         if (this.tree.options.debugLevel >= 1) {
-            Array.prototype.unshift.call(args, this.toString());
-            console.error.apply(console, args);
+            console.error(this.toString(), ...args); // eslint-disable-line no-console
         }
     }
-    /* Log to console if opts.debugLevel >= 3 */
+    /** Write to `console.info` with node name as prefix if opts.debugLevel >= 3. */
     logInfo(...args) {
         if (this.tree.options.debugLevel >= 3) {
-            Array.prototype.unshift.call(args, this.toString());
-            console.info.apply(console, args);
+            console.info(this.toString(), ...args); // eslint-disable-line no-console
         }
     }
-    /* Log warning to console if opts.debugLevel >= 2 */
+    /** Write to `console.warn` with node name as prefix if opts.debugLevel >= 2. */
     logWarn(...args) {
         if (this.tree.options.debugLevel >= 2) {
-            Array.prototype.unshift.call(args, this.toString());
-            console.warn.apply(console, args);
+            console.warn(this.toString(), ...args); // eslint-disable-line no-console
         }
     }
     /** Expand all parents and optionally scroll into visible area as neccessary.
@@ -3659,8 +4124,13 @@ class WunderbaumNode {
      *     Defaults to {noAnimation: false, noEvents: false, scrollIntoView: true}
      */
     async makeVisible(options) {
-        let i, dfd = new Deferred(), deferreds = [], parents = this.getParentList(false, false), len = parents.length, noAnimation = getOption(options, "noAnimation", false), scroll = getOption(options, "scrollIntoView", true);
-        // scroll = !(options && options.scrollIntoView === false);
+        let i;
+        const dfd = new Deferred();
+        const deferreds = [];
+        const parents = this.getParentList(false, false);
+        const len = parents.length;
+        const noAnimation = getOption(options, "noAnimation", false);
+        const scroll = getOption(options, "scrollIntoView", true);
         // Expand bottom-up, so only the top node is animated
         for (i = len - 1; i >= 0; i--) {
             // self.debug("pushexpand" + parents[i]);
@@ -3699,7 +4169,10 @@ class WunderbaumNode {
                 mode = "appendChild";
             }
         }
-        let pos, tree = this.tree, prevParent = this.parent, targetParent = mode === "appendChild" ? targetNode : targetNode.parent;
+        let pos;
+        const tree = this.tree;
+        const prevParent = this.parent;
+        const targetParent = mode === "appendChild" ? targetNode : targetNode.parent;
         if (this === targetNode) {
             return;
         }
@@ -3807,7 +4280,9 @@ class WunderbaumNode {
         try {
             node.makeVisible({ scrollIntoView: false });
         }
-        catch (e) { } // #272
+        catch (e) {
+            // ignore
+        }
         node.setFocus();
         if ((options === null || options === void 0 ? void 0 : options.activate) === false) {
             return Promise.resolve(this);
@@ -3828,15 +4303,16 @@ class WunderbaumNode {
     }
     /** Remove all descendants of this node. */
     removeChildren() {
+        var _a, _b;
         const tree = this.tree;
         if (!this.children) {
             return;
         }
-        if (tree.activeNode && tree.activeNode.isDescendantOf(this)) {
+        if ((_a = tree.activeNode) === null || _a === void 0 ? void 0 : _a.isDescendantOf(this)) {
             tree.activeNode.setActive(false); // TODO: don't fire events
         }
-        if (tree.focusNode && tree.focusNode.isDescendantOf(this)) {
-            tree.focusNode = null;
+        if ((_b = tree.focusNode) === null || _b === void 0 ? void 0 : _b.isDescendantOf(this)) {
+            tree._setFocusNode(null);
         }
         // TODO: persist must take care to clear select and expand cookies
         // Unlink children to support GC
@@ -3874,7 +4350,7 @@ class WunderbaumNode {
             ? (this._rowElem.querySelectorAll("span.wb-col"))
             : null;
         let idx = 0;
-        for (let col of this.tree.columns) {
+        for (const col of this.tree.columns) {
             allColInfosById[col.id] = {
                 id: col.id,
                 idx: idx,
@@ -3892,7 +4368,7 @@ class WunderbaumNode {
             renderColInfosById: renderColInfosById,
         };
     }
-    _createIcon(parentElem, replaceChild, showLoading) {
+    _createIcon(iconMap, parentElem, replaceChild, showLoading) {
         let iconSpan;
         let icon = this.getOption("icon");
         if (this._errorInfo) {
@@ -3933,7 +4409,7 @@ class WunderbaumNode {
         }
         else if (TEST_IMG.test(icon)) {
             // Image URL
-            iconSpan = elemFromHtml(`<img src="${icon}" class="wb-icon">`);
+            iconSpan = elemFromHtml(`<i class="wb-icon" style="background-image: url('${icon}');">`);
         }
         else {
             // Class name
@@ -3946,6 +4422,30 @@ class WunderbaumNode {
         else {
             parentElem.appendChild(iconSpan);
         }
+        // Event handler `tree.iconBadge` can return a badge text or HTMLSpanElement
+        const cbRes = this._callEvent("iconBadge", { iconSpan: iconSpan });
+        let badge = null;
+        if (cbRes != null && cbRes !== false) {
+            let classes = "";
+            let tooltip = "";
+            if (isPlainObject(cbRes)) {
+                badge = "" + cbRes.badge;
+                classes = cbRes.badgeClass ? " " + cbRes.badgeClass : "";
+                tooltip = cbRes.badgeTooltip ? ` title="${cbRes.badgeTooltip}"` : "";
+            }
+            else if (typeof cbRes === "number") {
+                badge = "" + cbRes;
+            }
+            else {
+                badge = cbRes; // string or HTMLSpanElement
+            }
+            if (typeof badge === "string") {
+                badge = elemFromHtml(`<span class="wb-badge${classes}"${tooltip}>${escapeHtml(badge)}</span>`);
+            }
+            if (badge) {
+                iconSpan.append(badge);
+            }
+        }
         // this.log("_createIcon: ", iconSpan);
         return iconSpan;
     }
@@ -3957,28 +4457,24 @@ class WunderbaumNode {
         const tree = this.tree;
         const treeOptions = tree.options;
         const checkbox = this.getOption("checkbox");
-        // const checkbox = this.getOption("checkbox") !== false;
         const columns = tree.columns;
         const level = this.getLevel();
-        let elem;
-        let nodeElem;
-        let rowDiv = this._rowElem;
-        let titleSpan;
-        let checkboxSpan = null;
-        let iconSpan;
-        let expanderSpan = null;
         const activeColIdx = tree.isRowNav() ? null : tree.activeColIdx;
+        let elem;
+        let rowDiv = this._rowElem;
+        let checkboxSpan = null;
+        let expanderSpan = null;
         const isNew = !rowDiv;
-        assert(isNew);
+        assert(isNew, "Expected unrendered node");
         assert(!isNew || (opts && opts.after), "opts.after expected, unless updating");
-        assert(!this.isRootNode());
+        assert(!this.isRootNode(), "Root node not allowed");
         rowDiv = document.createElement("div");
         rowDiv.classList.add("wb-row");
         rowDiv.style.top = this._rowIdx * ROW_HEIGHT + "px";
         this._rowElem = rowDiv;
         // Attach a node reference to the DOM Element:
         rowDiv._wb_node = this;
-        nodeElem = document.createElement("span");
+        const nodeElem = document.createElement("span");
         nodeElem.classList.add("wb-node", "wb-col");
         rowDiv.appendChild(nodeElem);
         let ofsTitlePx = 0;
@@ -4005,14 +4501,14 @@ class WunderbaumNode {
         }
         // Render the icon (show a 'loading' icon if we do not have an expander that
         // we would prefer).
-        iconSpan = this._createIcon(nodeElem, null, !expanderSpan);
+        const iconSpan = this._createIcon(tree.iconMap, nodeElem, null, !expanderSpan);
         if (iconSpan) {
             ofsTitlePx += ICON_WIDTH;
         }
-        titleSpan = document.createElement("span");
+        const titleSpan = document.createElement("span");
         titleSpan.classList.add("wb-title");
         nodeElem.appendChild(titleSpan);
-        this._callEvent("enhanceTitle", { titleSpan: titleSpan });
+        // this._callEvent("enhanceTitle", { titleSpan: titleSpan });
         // Store the width of leading icons with the node, so we can calculate
         // the width of the embedded title span later
         nodeElem._ofsTitlePx = ofsTitlePx;
@@ -4024,7 +4520,7 @@ class WunderbaumNode {
         const isColspan = this.isColspan();
         if (!isColspan && columns.length > 1) {
             let colIdx = 0;
-            for (let col of columns) {
+            for (const col of columns) {
                 colIdx++;
                 let colElem;
                 if (col.id === "*") {
@@ -4071,7 +4567,7 @@ class WunderbaumNode {
      * @see {@link WunderbaumNode._render}
      */
     _render_data(opts) {
-        assert(this._rowElem);
+        assert(this._rowElem, "No _rowElem");
         const tree = this.tree;
         const treeOptions = tree.options;
         const rowDiv = this._rowElem;
@@ -4089,6 +4585,10 @@ class WunderbaumNode {
         else {
             titleSpan.textContent = this.title; // TODO: this triggers scroll events
         }
+        const tooltip = this.getOption("tooltip", false);
+        if (tooltip) {
+            titleSpan.title = tooltip === true ? this.title : tooltip;
+        }
         // NOTE: At least on Safari, this render call triggers a scroll event
         // probably when a focused input is replaced.
         if (preventScroll) {
@@ -4097,7 +4597,7 @@ class WunderbaumNode {
         // Set the width of the title span, so overflow ellipsis work
         if (!treeOptions.skeleton) {
             if (isColspan) {
-                let vpWidth = tree.element.clientWidth;
+                const vpWidth = tree.element.clientWidth;
                 titleSpan.style.width =
                     vpWidth - nodeElem._ofsTitlePx - TITLE_SPAN_PAD_Y + "px";
             }
@@ -4139,6 +4639,7 @@ class WunderbaumNode {
     _render_status(opts) {
         // this.log("_render_status", opts);
         const tree = this.tree;
+        const iconMap = tree.iconMap;
         const treeOptions = tree.options;
         const typeInfo = this.type ? tree.types[this.type] : null;
         const rowDiv = this._rowElem;
@@ -4146,7 +4647,7 @@ class WunderbaumNode {
         const nodeElem = rowDiv.querySelector("span.wb-node");
         const expanderSpan = nodeElem.querySelector("i.wb-expander");
         const checkboxSpan = nodeElem.querySelector("i.wb-checkbox");
-        let rowClasses = ["wb-row"];
+        const rowClasses = ["wb-row"];
         this.expanded ? rowClasses.push("wb-expanded") : 0;
         this.lazy ? rowClasses.push("wb-lazy") : 0;
         this.selected ? rowClasses.push("wb-selected") : 0;
@@ -4171,27 +4672,34 @@ class WunderbaumNode {
             rowDiv.classList.add(...typeInfo.classes);
         }
         if (expanderSpan) {
+            let image = null;
             if (this._isLoading) {
-                expanderSpan.className = "wb-expander " + iconMap.loading;
+                image = iconMap.loading;
             }
             else if (this.isExpandable(false)) {
                 if (this.expanded) {
-                    expanderSpan.className = "wb-expander " + iconMap.expanderExpanded;
+                    image = iconMap.expanderExpanded;
                 }
                 else {
-                    expanderSpan.className = "wb-expander " + iconMap.expanderCollapsed;
+                    image = iconMap.expanderCollapsed;
                 }
             }
             else if (this.lazy && this.children == null) {
-                expanderSpan.className = "wb-expander " + iconMap.expanderLazy;
+                image = iconMap.expanderLazy;
+            }
+            if (image == null) {
+                expanderSpan.classList.add("wb-indent");
+            }
+            else if (TEST_IMG.test(image)) {
+                expanderSpan.style.backgroundImage = `url('${image}')`;
             }
             else {
-                expanderSpan.classList.add("wb-indent");
+                expanderSpan.className = "wb-expander " + image;
             }
         }
         if (checkboxSpan) {
             let cbclass = "wb-checkbox ";
-            if (this.parent.radiogroup) {
+            if (this.isRadio()) {
                 cbclass += "wb-radio ";
                 if (this.selected) {
                     cbclass += iconMap.radioChecked;
@@ -4218,13 +4726,14 @@ class WunderbaumNode {
         // Fix active cell in cell-nav mode
         if (!opts.isNew) {
             let i = 0;
-            for (let colSpan of rowDiv.children) {
+            for (const colSpan of rowDiv.children) {
                 colSpan.classList.toggle("wb-active", i++ === tree.activeColIdx);
+                colSpan.classList.remove("wb-error", "wb-invalid");
             }
             // Update icon (if not opts.isNew, which would rebuild markup anyway)
             const iconSpan = nodeElem.querySelector("i.wb-icon");
             if (iconSpan) {
-                this._createIcon(nodeElem, iconSpan, !expanderSpan);
+                this._createIcon(tree.iconMap, nodeElem, iconSpan, !expanderSpan);
             }
         }
         // Adjust column width
@@ -4232,7 +4741,7 @@ class WunderbaumNode {
             const colElems = rowDiv.querySelectorAll("span.wb-col");
             let idx = 0;
             let ofs = 0;
-            for (let colDef of this.tree.columns) {
+            for (const colDef of this.tree.columns) {
                 const colElem = colElems[idx];
                 colElem.style.left = `${ofs}px`;
                 colElem.style.width = `${colDef._widthPx}px`;
@@ -4291,8 +4800,8 @@ class WunderbaumNode {
      *
      * The result is compatible with node.addChildren().
      *
-     * @param include child nodes
-     * @param callback(dict, node) is called for every node, in order to allow
+     * @param recursive include child nodes
+     * @param callback is called for every node, in order to allow
      *     modifications.
      *     Return `false` to ignore this node or `"skip"` to include this node
      *     without its children.
@@ -4358,19 +4867,19 @@ class WunderbaumNode {
      *
      * @param name name of the option property (on node and tree)
      * @param defaultValue return this if nothing else matched
-     * {@link Wunderbaum.getOption|Wunderbaum.getOption()}
+     * {@link Wunderbaum.getOption|Wunderbaum.getOption}
      */
     getOption(name, defaultValue) {
-        let tree = this.tree;
+        const tree = this.tree;
         let opts = tree.options;
         // Lookup `name` in options dict
         if (name.indexOf(".") >= 0) {
             [opts, name] = name.split(".");
         }
-        let value = opts[name]; // ?? defaultValue;
+        const value = opts[name]; // ?? defaultValue;
         // A callback resolver always takes precedence
         if (typeof value === "function") {
-            let res = value.call(tree, {
+            const res = value.call(tree, {
                 type: "resolve",
                 tree: tree,
                 node: this,
@@ -4385,8 +4894,8 @@ class WunderbaumNode {
             return this[name];
         }
         // Use value from type definition if defined
-        let typeInfo = this.type ? tree.types[this.type] : undefined;
-        let res = typeInfo ? typeInfo[name] : undefined;
+        const typeInfo = this.type ? tree.types[this.type] : undefined;
+        const res = typeInfo ? typeInfo[name] : undefined;
         if (res !== undefined) {
             return res;
         }
@@ -4394,23 +4903,28 @@ class WunderbaumNode {
         return value !== null && value !== void 0 ? value : defaultValue;
     }
     /** Make sure that this node is visible in the viewport.
-     * @see {@link Wunderbaum.scrollTo|Wunderbaum.scrollTo()}
+     * @see {@link Wunderbaum.scrollTo|Wunderbaum.scrollTo}
      */
     async scrollIntoView(options) {
         const opts = Object.assign({ node: this }, options);
         return this.tree.scrollTo(opts);
     }
     /**
-     * Activate this node, deactivate previous, send events, activate column and scroll int viewport.
+     * Activate this node, deactivate previous, send events, activate column and
+     * scroll into viewport.
      */
     async setActive(flag = true, options) {
         const tree = this.tree;
-        const prev = tree.activeNode;
+        const prev = tree.getActiveNode();
         const retrigger = options === null || options === void 0 ? void 0 : options.retrigger; // Default: false
         const focusTree = options === null || options === void 0 ? void 0 : options.focusTree; // Default: false
-        const focusNode = (options === null || options === void 0 ? void 0 : options.focusNode) !== false; // Default: true
+        // const focusNode = options?.focusNode !== false; // Default: true
         const noEvents = options === null || options === void 0 ? void 0 : options.noEvents; // Default: false
-        const orgEvent = options === null || options === void 0 ? void 0 : options.event; // Default: false
+        const orgEvent = options === null || options === void 0 ? void 0 : options.event; // Default: null
+        const colIdx = options === null || options === void 0 ? void 0 : options.colIdx; // Default: null
+        const edit = options === null || options === void 0 ? void 0 : options.edit; // Default: false
+        assert(!colIdx || tree.isCellNav(), "colIdx requires cellNav");
+        assert(!edit || colIdx != null, "edit requires colIdx");
         if (!noEvents) {
             if (flag) {
                 if (prev !== this || retrigger) {
@@ -4424,7 +4938,7 @@ class WunderbaumNode {
                         }) === false) {
                         return;
                     }
-                    tree.activeNode = null;
+                    tree._setActiveNode(null);
                     prev === null || prev === void 0 ? void 0 : prev.update(ChangeType.status);
                 }
             }
@@ -4434,40 +4948,50 @@ class WunderbaumNode {
         }
         if (prev !== this) {
             if (flag) {
-                tree.activeNode = this;
-                if (focusNode || focusTree)
-                    tree.focusNode = this;
-                if (focusTree)
-                    tree.setFocus();
+                tree._setActiveNode(this);
             }
             prev === null || prev === void 0 ? void 0 : prev.update(ChangeType.status);
             this.update(ChangeType.status);
         }
-        if (options &&
-            options.colIdx != null &&
-            options.colIdx !== tree.activeColIdx &&
-            tree.isCellNav()) {
-            tree.setColumn(options.colIdx);
-        }
-        if (flag && !noEvents) {
-            this._callEvent("activate", { prevNode: prev, event: orgEvent });
-        }
-        return this.makeVisible();
+        return this.makeVisible().then(() => {
+            if (flag) {
+                if (focusTree || edit) {
+                    tree.setFocus();
+                    tree._setFocusNode(this);
+                    tree.focusNode.setFocus();
+                }
+                // if (focusNode || edit) {
+                //   tree.focusNode = this;
+                //   tree.focusNode.setFocus();
+                // }
+                if (colIdx != null && tree.isCellNav()) {
+                    tree.setColumn(colIdx, { edit: edit });
+                }
+                if (!noEvents) {
+                    this._callEvent("activate", { prevNode: prev, event: orgEvent });
+                }
+            }
+        });
     }
     /**
      * Expand or collapse this node.
      */
     async setExpanded(flag = true, options) {
         const { force, scrollIntoView, immediate } = options !== null && options !== void 0 ? options : {};
+        const sendEvents = !(options === null || options === void 0 ? void 0 : options.noEvents); // Default: send events
         if (!flag &&
             this.isExpanded() &&
             this.getLevel() <= this.tree.getOption("minExpandLevel") &&
             !force) {
-            this.logDebug("Ignored collapse request below expandLevel.");
+            this.logDebug("Ignored collapse request below minExpandLevel.");
             return;
         }
         if (!flag === !this.expanded) {
             return; // Nothing to do
+        }
+        if (sendEvents &&
+            this._callEvent("beforeExpand", { flag: flag }) === false) {
+            return;
         }
         // this.log("setExpanded()");
         if (flag && this.getOption("autoCollapse")) {
@@ -4480,12 +5004,15 @@ class WunderbaumNode {
         const updateOpts = { immediate: immediate };
         // const updateOpts = { immediate: !!util.getOption(options, "immediate") };
         this.tree.update(ChangeType.structure, updateOpts);
-        if (flag && scrollIntoView !== false) {
+        if (flag && scrollIntoView) {
             const lastChild = this.getLastChild();
             if (lastChild) {
                 this.tree.updatePendingModifications();
                 lastChild.scrollIntoView({ topNode: this });
             }
+        }
+        if (sendEvents) {
+            this._callEvent("expand", { flag: flag });
         }
     }
     /**
@@ -4493,9 +5020,9 @@ class WunderbaumNode {
      * @see {@link setActive}
      */
     setFocus(flag = true) {
-        assert(!!flag, "blur is not yet implemented");
+        assert(!!flag, "Blur is not yet implemented");
         const prev = this.tree.focusNode;
-        this.tree.focusNode = this;
+        this.tree._setFocusNode(this);
         prev === null || prev === void 0 ? void 0 : prev.update();
         this.update();
     }
@@ -4509,25 +5036,18 @@ class WunderbaumNode {
         throw new Error("Not yet implemented");
     }
     /**
-     * @deprecated since v0.3.6: use `update()` instead.
-     */
-    setModified(change = ChangeType.data) {
-        this.logWarn("setModified() is deprecated: use update() instead.");
-        return this.update(change);
-    }
-    /**
      * Trigger a repaint, typically after a status or data change.
      *
      * `change` defaults to 'data', which handles modifcations of title, icon,
      * and column content. It can be reduced to 'ChangeType.status' if only
      * active/focus/selected state has changed.
      *
-     * This method will eventually call  {@link WunderbaumNode._render()} with
+     * This method will eventually call  {@link WunderbaumNode._render} with
      * default options, but may be more consistent with the tree's
-     * {@link Wunderbaum.update()} API.
+     * {@link Wunderbaum.update} API.
      */
     update(change = ChangeType.data) {
-        assert(change === ChangeType.status || change === ChangeType.data);
+        assert(change === ChangeType.status || change === ChangeType.data, `Invalid change type ${change}`);
         this.tree.update(change, this);
     }
     /**
@@ -4535,7 +5055,7 @@ class WunderbaumNode {
      * @param stopOnParents only return the topmost selected node (useful with selectMode 'hier')
      */
     getSelectedNodes(stopOnParents = false) {
-        let nodeList = [];
+        const nodeList = [];
         this.visit((node) => {
             if (node.selected) {
                 nodeList.push(node);
@@ -4549,7 +5069,7 @@ class WunderbaumNode {
     /** Toggle the check/uncheck state. */
     toggleSelected(options) {
         let flag = this.isSelected();
-        if (flag === undefined) {
+        if (flag === undefined && !this.isRadio()) {
             flag = this._anySelectable();
         }
         else {
@@ -4604,7 +5124,7 @@ class WunderbaumNode {
      */
     fixSelection3AfterClick(opts) {
         const force = !!(opts === null || opts === void 0 ? void 0 : opts.force);
-        let flag = this.isSelected();
+        const flag = this.isSelected();
         this.visit((node) => {
             if (node.radiogroup) {
                 return "skip"; // Don't (de)select this branch
@@ -4715,7 +5235,7 @@ class WunderbaumNode {
                 if (!flag && !(options === null || options === void 0 ? void 0 : options.force)) {
                     return prev; // don't uncheck radio buttons
                 }
-                for (let sibling of this.parent.children) {
+                for (const sibling of this.parent.children) {
                     sibling.selected = sibling === this;
                 }
             }
@@ -4744,7 +5264,7 @@ class WunderbaumNode {
         let statusNode = null;
         const _clearStatusNode = () => {
             // Remove dedicated dummy node, if any
-            let children = this.children;
+            const children = this.children;
             if (children && children.length && children[0].isStatusNode()) {
                 children[0].remove();
             }
@@ -4753,10 +5273,10 @@ class WunderbaumNode {
             // Create/modify the dedicated dummy node for 'loading...' or
             // 'error!' status. (only called for direct child of the invisible
             // system root)
-            let children = this.children;
-            let firstChild = children ? children[0] : null;
-            assert(data.statusNodeType);
-            assert(!firstChild || !firstChild.isStatusNode());
+            const children = this.children;
+            const firstChild = children ? children[0] : null;
+            assert(data.statusNodeType, "Not a status node");
+            assert(!firstChild || !firstChild.isStatusNode(), "Child must not be a status node");
             statusNode = this.addNode(data, "prependChild");
             statusNode.match = true;
             tree.update(ChangeType.structure);
@@ -4823,6 +5343,11 @@ class WunderbaumNode {
         this.update();
         // this.triggerModify("rename"); // TODO
     }
+    /** Set the node tooltip. */
+    setTooltip(tooltip) {
+        this.tooltip = tooltip;
+        this.update();
+    }
     _sortChildren(cmp, deep) {
         const cl = this.children;
         if (!cl) {
@@ -4849,13 +5374,88 @@ class WunderbaumNode {
         // this.triggerModify("sort"); // TODO
     }
     /**
+     * Renumber nodes `_nativeIndex`. This is useful to allow to restore the
+     * order after sorting a column.
+     * This method is automatically called after loading new child nodes.
+     * @since 0.11.0
+     */
+    resetNativeChildOrder(options) {
+        const { recursive = true, propName = "_nativeIndex" } = options !== null && options !== void 0 ? options : {};
+        if (this.children) {
+            this.children.forEach((child, i) => {
+                child.data[propName] = i;
+                if (recursive && child.children) {
+                    child.resetNativeChildOrder(options);
+                }
+            });
+        }
+    }
+    /**
+     * Convenience method to implement column sorting.
+     * @since 0.11.0
+     */
+    sortByProperty(options) {
+        var _a, _b, _c;
+        const { caseInsensitive = true, deep = true, nativeOrderPropName = "_nativeIndex", updateColInfo = false, } = options;
+        let order;
+        let colDef;
+        if (updateColInfo) {
+            colDef = this.tree["_columnsById"][options.colId];
+            assert(colDef, `Invalid colId specified: ${options.colId}`);
+            order =
+                (_a = options.order) !== null && _a !== void 0 ? _a : rotate(colDef.sortOrder, ["asc", "desc", undefined]);
+            for (const col of this.tree.columns) {
+                col.sortOrder = col === colDef ? order : undefined;
+            }
+            this.tree.update(ChangeType.colStructure);
+        }
+        else {
+            order = (_b = options.order) !== null && _b !== void 0 ? _b : "asc";
+        }
+        let propName = (_c = options.propName) !== null && _c !== void 0 ? _c : (options.colId || "");
+        if (propName === "*") {
+            propName = "title";
+        }
+        if (order == null) {
+            propName = nativeOrderPropName;
+            order = "asc";
+        }
+        this.logDebug(`sortByProperty(), propName=${propName}, ${order}`, options);
+        assert(propName, "No property name specified");
+        const cmp = (a, b) => {
+            let av, bv;
+            if (NODE_DICT_PROPS.has(propName)) {
+                av = a[propName];
+                bv = b[propName];
+            }
+            else {
+                av = a.data[propName];
+                bv = b.data[propName];
+            }
+            if (caseInsensitive) {
+                if (typeof av === "string") {
+                    av = av.toLowerCase();
+                }
+                if (typeof bv === "string") {
+                    bv = bv.toLowerCase();
+                }
+            }
+            if (order === "desc") {
+                return av === bv ? 0 : av > bv ? -1 : 1;
+            }
+            return av === bv ? 0 : av > bv ? 1 : -1;
+        };
+        return this.sortChildren(cmp, deep);
+    }
+    /**
      * Trigger `modifyChild` event on a parent to signal that a child was modified.
      * @param {string} operation Type of change: 'add', 'remove', 'rename', 'move', 'data', ...
      */
     triggerModifyChild(operation, child, extra) {
         this.logDebug(`modifyChild(${operation})`, extra, child);
-        if (!this.tree.options.modifyChild)
+        if (!this.tree.options.modifyChild) {
             return;
+        }
         if (child && child.parent !== this) {
             error("child " + child + " is not a child of " + this);
         }
@@ -4885,7 +5485,8 @@ class WunderbaumNode {
      * @see {@link IterableIterator<WunderbaumNode>}, {@link Wunderbaum.visit}.
      */
     visit(callback, includeSelf = false) {
-        let i, l, res = true, children = this.children;
+        let res = true;
+        const children = this.children;
         if (includeSelf === true) {
             res = callback(this);
             if (res === false || res === "skip") {
@@ -4893,7 +5494,7 @@ class WunderbaumNode {
             }
         }
         if (children) {
-            for (i = 0, l = children.length; i < l; i++) {
+            for (let i = 0, l = children.length; i < l; i++) {
                 res = children[i].visit(callback, true);
                 if (res === false) {
                     break;
@@ -4926,13 +5527,14 @@ class WunderbaumNode {
      * Stop iteration, if fn() returns false.<br>
      * Return false if iteration was stopped.
      *
-     * @param {function} fn the callback function.
+     * @param callback the callback function.
      *     Return false to stop iteration.
+     * @param includeSelf include this node in the iteration.
      */
     visitSiblings(callback, includeSelf = false) {
-        let i, l, n, ac = this.parent.children;
-        for (i = 0, l = ac.length; i < l; i++) {
-            n = ac[i];
+        const ac = this.parent.children;
+        for (let i = 0, l = ac.length; i < l; i++) {
+            const n = ac[i];
             if (includeSelf || n !== this) {
                 if (callback(n) === false) {
                     return false;
@@ -4952,8 +5554,8 @@ WunderbaumNode.sequence = 0;
 
 /*!
  * Wunderbaum - ext-edit
- * Copyright (c) 2021-2023, Martin Wendt. Released under the MIT license.
- * v0.4.0, Wed, 06 Sep 2023 08:21:56 GMT (https://github.com/mar10/wunderbaum)
+ * Copyright (c) 2021-2024, Martin Wendt. Released under the MIT license.
+ * v0.11.0, Sun, 04 Aug 2024 15:35:53 GMT (https://github.com/mar10/wunderbaum)
  */
 // const START_MARKER = "\uFFF7";
 class EditExtension extends WunderbaumExtension {
@@ -4962,11 +5564,11 @@ class EditExtension extends WunderbaumExtension {
             debounce: 100,
             minlength: 1,
             maxlength: null,
-            trigger: [],
+            trigger: [], //["clickActive", "F2", "macEnter"],
             trim: true,
             select: true,
-            slowClickDelay: 1000,
-            validity: true,
+            slowClickDelay: 1000, // Handle 'clickActive' only if last click is less than this old (0: always)
+            validity: true, //"Please enter a title",
             // --- Events ---
             // (note: there is also the `tree.change` event.)
             beforeEdit: null,
@@ -4978,40 +5580,62 @@ class EditExtension extends WunderbaumExtension {
         this.debouncedOnChange = debounce(this._onChange.bind(this), this.getPluginOption("debounce"));
     }
     /*
-     * Call an event handler, while marking the current node cell 'dirty'.
+     * Call an event handler, while marking the current node cell 'busy'.
+     * Deal with returned promises and ValidationError.
+     * Convert a ValidationError into a input.setCustomValidity() call and vice versa.
      */
-    _applyChange(eventName, node, colElem, extra) {
-        let res;
+    async _applyChange(eventName, node, colElem, inputElem, extra) {
         node.log(`_applyChange(${eventName})`, extra);
         colElem.classList.add("wb-busy");
-        colElem.classList.remove("wb-error");
-        try {
-            res = node._callEvent(eventName, extra);
-        }
-        catch (err) {
-            node.logError(`Error in ${eventName} event handler`, err);
-            colElem.classList.add("wb-error");
-            colElem.classList.remove("wb-busy");
-        }
-        // Convert scalar return value to a resolved promise
-        if (!(res instanceof Promise)) {
-            res = Promise.resolve(res);
-        }
-        res
+        colElem.classList.remove("wb-error", "wb-invalid");
+        inputElem.setCustomValidity("");
+        // Call event handler either ('change' or 'edit.appy'), which may return a
+        // promise or a scalar value or throw a ValidationError.
+        return new Promise((resolve, reject) => {
+            const res = node._callEvent(eventName, extra);
+            // normalize to promise, even if a scalar value was returned and await it
+            Promise.resolve(res)
+                .then((res) => {
+                resolve(res);
+            })
+                .catch((err) => {
+                reject(err);
+            });
+        })
+            .then((res) => {
+            if (!inputElem.checkValidity()) {
+                // Native validation failed or handler called 'inputElem.setCustomValidity()'
+                node.logWarn("inputElem.checkValidity() failed: throwing....");
+                throw new ValidationError(inputElem.validationMessage);
+            }
+            return res;
+        })
             .catch((err) => {
-            node.logError(`Error in ${eventName} event promise`, err);
-            colElem.classList.add("wb-error");
+            if (err instanceof ValidationError) {
+                node.logWarn("catched ", err);
+                colElem.classList.add("wb-invalid");
+                if (inputElem.setCustomValidity && !inputElem.validationMessage) {
+                    inputElem.setCustomValidity(err.message);
+                }
+                if (inputElem.validationMessage) {
+                    inputElem.reportValidity();
+                }
+                // throw err;
+            }
+            else {
+                node.logError(`Error in ${eventName} event handler (throw e.util.ValidationError instead if this was intended)`, err);
+                colElem.classList.add("wb-error");
+                throw err;
+            }
         })
             .finally(() => {
             colElem.classList.remove("wb-busy");
         });
-        return res;
     }
     /*
      * Called for when a control that is embedded in a cell fires a `change` event.
      */
     _onChange(e) {
-        // let res;
         const info = Wunderbaum.getEventInfo(e);
         const node = info.node;
         const colElem = info.colElem;
@@ -5019,22 +5643,25 @@ class EditExtension extends WunderbaumExtension {
             this.tree.log("Ignored change event for removed element or node title");
             return;
         }
-        this._applyChange("change", node, colElem, {
+        // See also WbChangeEventType
+        this._applyChange("change", node, colElem, e.target, {
             info: info,
             event: e,
             inputElem: e.target,
             inputValue: Wunderbaum.util.getValueFromElem(e.target),
+            inputValid: e.target.checkValidity(),
         });
     }
-    // handleKey(e:KeyboardEvent):boolean {
-    //   if(this.tree.cellNavMode )
-    // }
     init() {
         super.init();
         onEvent(this.tree.element, "change", //"change input",
-        ".contenteditable,input,textarea,select", (e) => {
-            this.debouncedOnChange(e);
-        });
+        ".contenteditable,input,textarea,select", 
+        // #61: we must not debounce the `change`, event.target may be reset to null
+        // when the debounced handler is called.
+        // (e) => {
+        //   this.debouncedOnChange(e);
+        // }
+        (e) => this._onChange(e));
     }
     /* Called by ext_keynav to pre-process input. */
     _preprocessKeyEvent(data) {
@@ -5071,7 +5698,6 @@ class EditExtension extends WunderbaumExtension {
                     break;
                 case "F2":
                     if (trigger.indexOf("F2") >= 0) {
-                        // tree.setNavigationMode(NavigationMode.cellEdit);
                         this.startEditTitle();
                         return false;
                     }
@@ -5096,14 +5722,21 @@ class EditExtension extends WunderbaumExtension {
         this.tree.logDebug(`startEditTitle(node=${node})`);
         let inputHtml = node._callEvent("edit.beforeEdit");
         if (inputHtml === false) {
-            node.logInfo("beforeEdit canceled operation.");
+            node.logDebug("beforeEdit canceled operation.");
             return;
         }
-        // `beforeEdit(e)` may return an input HTML string. Otherwise use a default.
+        // `beforeEdit(e)` may return an input HTML string. Otherwise use a default
         // (we also treat a `true` return value as 'use default'):
         if (inputHtml === true || !inputHtml) {
             const title = escapeHtml(node.title);
-            inputHtml = `<input type=text class="wb-input-edit" tabindex=-1 value="${title}" required autocorrect=off>`;
+            let opt = this.getPluginOption("maxlength");
+            const maxlength = opt ? ` maxlength="${opt}"` : "";
+            opt = this.getPluginOption("minlength");
+            const minlength = opt ? ` minlength="${opt}"` : "";
+            const required = opt > 0 ? " required" : "";
+            inputHtml =
+                `<input type=text class="wb-input-edit" tabindex=-1 value="${title}" ` +
+                    `autocorrect="off"${required}${minlength}${maxlength} >`;
         }
         const titleSpan = node
             .getColElem(0)
@@ -5114,7 +5747,9 @@ class EditExtension extends WunderbaumExtension {
             // Permanently apply input validations (CSS and tooltip)
             inputElem.addEventListener("keydown", (e) => {
                 inputElem.setCustomValidity("");
-                if (!inputElem.reportValidity()) ;
+                if (!inputElem.reportValidity()) {
+                    node.logWarn(`Invalid input: '${inputElem.value}'`);
+                }
             });
         }
         inputElem.focus();
@@ -5140,6 +5775,7 @@ class EditExtension extends WunderbaumExtension {
      * @param opts.canKeepOpen
      */
     _stopEditTitle(apply, options) {
+        var _a;
         options !== null && options !== void 0 ? options : (options = {});
         const focusElem = document.activeElement;
         let newValue = focusElem ? getValueFromElem(focusElem) : null;
@@ -5161,12 +5797,13 @@ class EditExtension extends WunderbaumExtension {
                 throw new Error(`Input validation failed for "${newValue}": ${errMsg}.`);
             }
             const colElem = node.getColElem(0);
-            this._applyChange("edit.apply", node, colElem, {
+            this._applyChange("edit.apply", node, colElem, focusElem, {
                 oldValue: node.title,
                 newValue: newValue,
                 inputElem: focusElem,
-            })
-                .then((value) => {
+                inputValid: focusElem.checkValidity(),
+            }).then((value) => {
+                var _a;
                 const errMsg = focusElem.validationMessage;
                 if (validity && errMsg && value !== false) {
                     // Handler called 'inputElem.setCustomValidity()' to signal error
@@ -5181,14 +5818,14 @@ class EditExtension extends WunderbaumExtension {
                 node === null || node === void 0 ? void 0 : node.setTitle(newValue);
                 // NOTE: At least on Safari, this render call triggers a scroll event
                 // probably because the focused input is replaced.
-                this.curEditNode._render({ preventScroll: true });
+                (_a = this.curEditNode) === null || _a === void 0 ? void 0 : _a._render({ preventScroll: true });
                 this.curEditNode = null;
                 this.relatedNode = null;
                 this.tree.setFocus(); // restore focus that was in the input element
-            })
-                .catch((err) => {
-                node.logError(err);
             });
+            // .catch((err) => {
+            //   node.logError(err);
+            // });
             // Trigger 'change' event for embedded `<input>`
             // focusElem.blur();
         }
@@ -5196,7 +5833,7 @@ class EditExtension extends WunderbaumExtension {
             // Discard the embedded `<input>`
             // NOTE: At least on Safari, this render call triggers a scroll event
             // probably because the focused input is replaced.
-            this.curEditNode._render({ preventScroll: true });
+            (_a = this.curEditNode) === null || _a === void 0 ? void 0 : _a._render({ preventScroll: true });
             this.curEditNode = null;
             this.relatedNode = null;
             // We discarded the <input>, so we have to acquire keyboard focus again
@@ -5219,7 +5856,7 @@ class EditExtension extends WunderbaumExtension {
             init = { title: init };
         }
         else {
-            assert(isPlainObject(init));
+            assert(isPlainObject(init), `Expected a plain object: ${init}`);
         }
         // Make sure node is expanded (and loaded) in 'child' mode
         if ((mode === "prependChild" || mode === "appendChild") &&
@@ -5245,12 +5882,12 @@ class EditExtension extends WunderbaumExtension {
  *
  * A treegrid control.
  *
- * Copyright (c) 2021-2023, Martin Wendt (https://wwWendt.de).
+ * Copyright (c) 2021-2024, Martin Wendt (https://wwWendt.de).
  * https://github.com/mar10/wunderbaum
  *
  * Released under the MIT license.
- * @version v0.4.0
- * @date Wed, 06 Sep 2023 08:21:56 GMT
+ * @version v0.11.0
+ * @date Sun, 04 Aug 2024 15:35:53 GMT
  */
 // import "./wunderbaum.scss";
 class WbSystemRoot extends WunderbaumNode {
@@ -5267,9 +5904,25 @@ class WbSystemRoot extends WunderbaumNode {
 /**
  * A persistent plain object or array.
  *
- * See also [[WunderbaumOptions]].
+ * See also {@link WunderbaumOptions}.
  */
 class Wunderbaum {
+    /** Currently active node if any.
+     * Use @link {WunderbaumNode.setActive|setActive} to modify.
+     */
+    get activeNode() {
+        var _a;
+        // Check for deleted node, i.e. node.tree === null
+        return ((_a = this._activeNode) === null || _a === void 0 ? void 0 : _a.tree) ? this._activeNode : null;
+    }
+    /** Current node hat has keyboard focus if any.
+     * Use @link {WunderbaumNode.setFocus|setFocus()} to modify.
+     */
+    get focusNode() {
+        var _a;
+        // Check for deleted node, i.e. node.tree === null
+        return ((_a = this._focusNode) === null || _a === void 0 ? void 0 : _a.tree) ? this._focusNode : null;
+    }
     constructor(options) {
         this.enabled = true;
         /** Contains additional data that was sent as response to an Ajax source load request. */
@@ -5281,10 +5934,8 @@ class Wunderbaum {
         this.treeRowCount = 0;
         this._disableUpdateCount = 0;
         this._disableUpdateIgnoreCount = 0;
-        /** Currently active node if any. */
-        this.activeNode = null;
-        /** Current node hat has keyboard focus if any. */
-        this.focusNode = null;
+        this._activeNode = null;
+        this._focusNode = null;
         /** Shared properties, referenced by `node.type`. */
         this.types = {};
         /** List of column definitions. */
@@ -5298,9 +5949,10 @@ class Wunderbaum {
         // /** @internal */
         // public selectRangeAnchor: WunderbaumNode | null = null;
         // --- FILTER ---
+        /** Filter options (used as defaults for calls to {@link Wunderbaum.filterNodes} ) */
         this.filterMode = null;
         // --- KEYNAV ---
-        /** @internal Use `setColumn()`/`getActiveColElem()`*/
+        /** @internal Use `setColumn()`/`getActiveColElem()` to access. */
         this.activeColIdx = 0;
         /** @internal */
         this._cellNavMode = false;
@@ -5310,18 +5962,15 @@ class Wunderbaum {
         this.lastQuicksearchTerm = "";
         // --- EDIT ---
         this.lastClickTime = 0;
-        /** Alias for {@link Wunderbaum.logDebug}.
-         * @alias Wunderbaum.logDebug
-         */
-        this.log = this.logDebug;
-        let opts = (this.options = extend({
+        const opts = (this.options = extend({
             id: null,
-            source: null,
-            element: null,
-            debugLevel: DEFAULT_DEBUGLEVEL,
-            header: null,
+            source: null, // URL for GET/PUT, Ajax options, or callback
+            element: null, // <div class="wunderbaum">
+            debugLevel: DEFAULT_DEBUGLEVEL, // 0:quiet, 1:errors, 2:warnings, 3:info, 4:verbose
+            header: null, // Show/hide header (pass bool or string)
             // headerHeightPx: ROW_HEIGHT,
             rowHeightPx: ROW_HEIGHT,
+            iconMap: "bootstrap",
             columns: null,
             types: null,
             // escapeTitles: true,
@@ -5333,16 +5982,17 @@ class Wunderbaum {
             emptyChildListExpandable: false,
             // updateThrottleWait: 200,
             skeleton: false,
-            connectTopBreadcrumb: null,
-            selectMode: "multi",
+            connectTopBreadcrumb: null, // HTMLElement that receives the top nodes breadcrumb
+            selectMode: "multi", // SelectModeType
             // --- KeyNav ---
-            navigationModeOption: null,
+            navigationModeOption: null, // NavModeEnum.startRow,
             quicksearch: true,
             // --- Events ---
-            change: noop,
-            enhanceTitle: noop,
-            error: noop,
-            receive: noop,
+            iconBadge: null,
+            change: null,
+            // enhanceTitle: null,
+            error: null,
+            receive: null,
             // --- Strings ---
             strings: {
                 loadError: "Error",
@@ -5363,7 +6013,7 @@ class Wunderbaum {
             catch (error) {
                 // We re-raise in the reject handler, but Chrome resets the stack
                 // frame then, so we log it here:
-                console.error("Exception inside `init(e)` event:", error);
+                this.logError("Exception inside `init(e)` event:", error);
             }
         })
             .catch((err) => {
@@ -5407,7 +6057,8 @@ class Wunderbaum {
         // Attach tree instance to <div>
         this.element._wb_tree = this;
         // Create header markup, or take it from the existing html
-        this.headerElement = this.element.querySelector("div.wb-header");
+        this.headerElement =
+            this.element.querySelector("div.wb-header");
         const wantHeader = opts.header == null ? this.columns.length > 1 : !!opts.header;
         if (this.headerElement) {
             // User existing header markup to define `this.columns`
@@ -5444,8 +6095,10 @@ class Wunderbaum {
         <div class="wb-node-list"></div>
       </div>`;
         this.listContainerElement = this.element.querySelector("div.wb-list-container");
-        this.nodeListElement = this.listContainerElement.querySelector("div.wb-node-list");
-        this.headerElement = this.element.querySelector("div.wb-header");
+        this.nodeListElement =
+            this.listContainerElement.querySelector("div.wb-node-list");
+        this.headerElement =
+            this.element.querySelector("div.wb-header");
         this.element.classList.toggle("wb-grid", this.columns.length > 1);
         this._initExtensions();
         // --- apply initial options
@@ -5474,6 +6127,7 @@ class Wunderbaum {
                 else {
                     this.setNavigationOption(opts.navigationModeOption);
                 }
+                this.update(ChangeType.structure, { immediate: true });
                 readyDeferred.resolve();
             })
                 .catch((error) => {
@@ -5501,6 +6155,16 @@ class Wunderbaum {
             this.update(ChangeType.resize);
         });
         this.resizeObserver.observe(this.element);
+        onEvent(this.element, "click", ".wb-button,.wb-col-icon", (e) => {
+            var _a, _b;
+            const info = Wunderbaum.getEventInfo(e);
+            const command = (_b = (_a = e.target) === null || _a === void 0 ? void 0 : _a.dataset) === null || _b === void 0 ? void 0 : _b.command;
+            this._callEvent("buttonClick", {
+                event: e,
+                info: info,
+                command: command,
+            });
+        });
         onEvent(this.nodeListElement, "click", "div.wb-row", (e) => {
             const info = Wunderbaum.getEventInfo(e);
             const node = info.node;
@@ -5525,7 +6189,7 @@ class Wunderbaum {
                     info.region === "title" &&
                     node.isActive() &&
                     (!slowClickDelay || Date.now() - this.lastClickTime < slowClickDelay)) {
-                    this._callMethod("edit.startEditTitle", node);
+                    node.startEditTitle();
                 }
                 if (info.colIdx >= 0) {
                     node.setActive(true, { colIdx: info.colIdx, event: e });
@@ -5534,7 +6198,9 @@ class Wunderbaum {
                     node.setActive(true, { event: e });
                 }
                 if (info.region === NodeRegion.expander) {
-                    node.setExpanded(!node.isExpanded());
+                    node.setExpanded(!node.isExpanded(), {
+                        scrollIntoView: options.scrollIntoViewOnExpandClick !== false,
+                    });
                 }
                 else if (info.region === NodeRegion.checkbox) {
                     node.toggleSelected();
@@ -5570,7 +6236,7 @@ class Wunderbaum {
             const flag = e.type === "focusin";
             const targetNode = Wunderbaum.getNode(e);
             this._callEvent("focus", { flag: flag, event: e });
-            if (flag && this.isRowNav() && !this.isEditing()) {
+            if (flag && this.isRowNav() && !this.isEditingTitle()) {
                 if (opts.navigationModeOption === NavModeEnum.row) {
                     targetNode === null || targetNode === void 0 ? void 0 : targetNode.setActive();
                 }
@@ -5594,7 +6260,7 @@ class Wunderbaum {
      * getTree(1);        // Get second Wunderbaum instance on page
      * getTree(event);    // Get tree for this mouse- or keyboard event
      * getTree("foo");    // Get tree for this `tree.options.id`
-     * getTree("#tree");  // Get tree for this matching element
+     * getTree("#tree");  // Get tree for first matching element selector
      * ```
      */
     static getTree(el) {
@@ -5612,7 +6278,7 @@ class Wunderbaum {
         }
         else if (typeof el === "string") {
             // Search all trees for matching ID
-            for (let treeElem of document.querySelectorAll(".wunderbaum")) {
+            for (const treeElem of document.querySelectorAll(".wunderbaum")) {
                 const tree = treeElem._wb_tree;
                 if (tree && tree.id === el) {
                     return tree;
@@ -5627,7 +6293,7 @@ class Wunderbaum {
         else if (el.target) {
             el = el.target;
         }
-        assert(el instanceof Element);
+        assert(el instanceof Element, `Invalid el type: ${el}`);
         if (!el.matches(".wunderbaum")) {
             el = el.closest(".wunderbaum");
         }
@@ -5635,6 +6301,16 @@ class Wunderbaum {
             return el._wb_tree;
         }
         return null;
+    }
+    /**
+     * Return the icon-function -> icon-definition mapping.
+     */
+    get iconMap() {
+        const map = this.options.iconMap;
+        if (typeof map === "string") {
+            return iconMaps[map];
+        }
+        return map;
     }
     /**
      * Return a WunderbaumNode instance from element or event.
@@ -5681,48 +6357,51 @@ class Wunderbaum {
     }
     /** Called on tree (re)init after markup is created, before loading. */
     _initExtensions() {
-        for (let ext of this.extensionList) {
+        for (const ext of this.extensionList) {
             ext.init();
         }
     }
     /** Add node to tree's bookkeeping data structures. */
     _registerNode(node) {
         const key = node.key;
-        assert(key != null && !this.keyMap.has(key), `Missing or duplicate key: '${key}'.`);
+        assert(key != null, `Missing key: '${node}'.`);
+        assert(!this.keyMap.has(key), `Duplicate key: '${key}': ${node}.`);
         this.keyMap.set(key, node);
-        let rk = node.refKey;
-        if (rk) {
-            let rks = this.refKeyMap.get(rk); // Set of nodes with this refKey
+        const rk = node.refKey;
+        if (rk != null) {
+            const rks = this.refKeyMap.get(rk); // Set of nodes with this refKey
             if (rks) {
                 rks.add(node);
             }
             else {
-                this.refKeyMap.set(rk, new Set());
+                this.refKeyMap.set(rk, new Set([node]));
             }
         }
     }
     /** Remove node from tree's bookkeeping data structures. */
     _unregisterNode(node) {
+        // Remove refKey reference from map (if any)
         const rk = node.refKey;
-        if (rk) {
+        if (rk != null) {
             const rks = this.refKeyMap.get(rk);
             if (rks && rks.delete(node) && !rks.size) {
                 // We just removed the last element
                 this.refKeyMap.delete(rk);
             }
         }
-        // mark as disposed
+        // Remove key reference from map
+        this.keyMap.delete(node.key);
+        // Mark as disposed
         node.tree = null;
         node.parent = null;
-        // node.title = "DISPOSED: " + node.title
-        // this.viewNodes.delete(node);
+        // Remove HTML markup
         node.removeMarkup();
     }
     /** Call all hook methods of all registered extensions.*/
     _callHook(hook, data = {}) {
         let res;
-        let d = extend({}, { tree: this, options: this.options, result: undefined }, data);
-        for (let ext of this.extensionList) {
+        const d = extend({}, { tree: this, options: this.options, result: undefined }, data);
+        for (const ext of this.extensionList) {
             res = ext[hook].call(ext, d);
             if (res === false) {
                 break;
@@ -5869,7 +6548,7 @@ class Wunderbaum {
         }
         else {
             node = this.getActiveNode();
-            assert(options === undefined);
+            assert(options === undefined, `Unexpected options: ${options}`);
             options = nodeOrOpts;
         }
         // clipboard = options.clipboard;
@@ -5919,7 +6598,7 @@ class Wunderbaum {
                 this._callMethod("edit.createNode", "after");
                 break;
             case "rename":
-                this._callMethod("edit.startEditTitle");
+                node.startEditTitle();
                 break;
             // Simple clipboard simulation:
             // case "cut":
@@ -5966,10 +6645,9 @@ class Wunderbaum {
         this.root.children = null;
         this.keyMap.clear();
         this.refKeyMap.clear();
-        // this.viewNodes.clear();
         this.treeRowCount = 0;
-        this.activeNode = null;
-        this.focusNode = null;
+        this._activeNode = null;
+        this._focusNode = null;
         // this.types = {};
         // this. columns =[];
         // this._columnsById = {};
@@ -5999,7 +6677,7 @@ class Wunderbaum {
         this.resizeObserver.disconnect();
         this.element.innerHTML = "";
         // Remove all event handlers
-        this.element.outerHTML = this.element.outerHTML;
+        this.element.outerHTML = this.element.outerHTML; // eslint-disable-line
     }
     /**
      * Return `tree.option.NAME` (also resolving if this is a callback).
@@ -6067,7 +6745,7 @@ class Wunderbaum {
     }
     /** Run code, but defer rendering of viewport until done.
      *
-     * ```
+     * ```js
      * tree.runWithDeferredUpdate(() => {
      *   return someFuncThatWouldUpdateManyNodes();
      * });
@@ -6077,7 +6755,7 @@ class Wunderbaum {
         try {
             this.enableUpdate(false);
             const res = func();
-            assert(!(res instanceof Promise));
+            assert(!(res instanceof Promise), `Promise return not allowed: ${res}`);
             return res;
         }
         finally {
@@ -6159,14 +6837,31 @@ class Wunderbaum {
     /**
      * Find all nodes that match condition.
      *
+     * @param match title string to search for, or a
+     *     callback function that returns `true` if a node is matched.
      * @see {@link WunderbaumNode.findAll}
      */
     findAll(match) {
         return this.root.findAll(match);
     }
     /**
+     * Find all nodes with a given _refKey_ (aka a list of clones).
+     *
+     * @param refKey a `node.refKey` value to search for.
+     * @returns an array of matching nodes with at least two element or `[]`
+     * if nothing found.
+     *
+     * @see {@link WunderbaumNode.getCloneList}
+     */
+    findByRefKey(refKey) {
+        const clones = this.refKeyMap.get(refKey);
+        return clones ? Array.from(clones) : [];
+    }
+    /**
      * Find first node that matches condition.
      *
+     * @param match title string to search for, or a
+     *     callback function that returns `true` if a node is matched.
      * @see {@link WunderbaumNode.findFirst}
      */
     findFirst(match) {
@@ -6175,8 +6870,6 @@ class Wunderbaum {
     /**
      * Find first node that matches condition.
      *
-     * @param match title string to search for, or a
-     *     callback function that returns `true` if a node is matched.
      * @see {@link WunderbaumNode.findFirst}
      *
      */
@@ -6186,11 +6879,13 @@ class Wunderbaum {
     /**
      * Find the next visible node that starts with `match`, starting at `startNode`
      * and wrap-around at the end.
+     * Used by quicksearch and keyboard navigation.
      */
     findNextNode(match, startNode) {
         //, visibleOnly) {
-        let res = null, firstNode = this.getFirstChild();
-        let matcher = typeof match === "string" ? makeNodeTitleStartMatcher(match) : match;
+        let res = null;
+        const firstNode = this.getFirstChild();
+        const matcher = typeof match === "string" ? makeNodeTitleStartMatcher(match) : match;
         startNode = startNode || firstNode;
         function _checkNode(n) {
             // console.log("_check " + n)
@@ -6281,13 +6976,15 @@ class Wunderbaum {
                 res = this._getNextNodeInView(node);
                 break;
             case "pageDown":
-                const bottomNode = this.getLowestVpNode();
-                // this.logDebug(`${where}(${node}) -> ${bottomNode}`);
-                if (node._rowIdx < bottomNode._rowIdx) {
-                    res = bottomNode;
-                }
-                else {
-                    res = this._getNextNodeInView(node, pageSize);
+                {
+                    const bottomNode = this.getLowestVpNode();
+                    // this.logDebug(`${where}(${node}) -> ${bottomNode}`);
+                    if (node._rowIdx < bottomNode._rowIdx) {
+                        res = bottomNode;
+                    }
+                    else {
+                        res = this._getNextNodeInView(node, pageSize);
+                    }
                 }
                 break;
             case "pageUp":
@@ -6314,7 +7011,7 @@ class Wunderbaum {
      * Iterator version of {@link Wunderbaum.format}.
      */
     *format_iter(name_cb, connectors) {
-        return this.root.format_iter(name_cb, connectors);
+        yield* this.root.format_iter(name_cb, connectors);
     }
     /**
      * Return multiline string representation of the node hierarchy.
@@ -6349,7 +7046,13 @@ class Wunderbaum {
         return null;
     }
     /**
-     * Return the currently active node or null.
+     * Return the currently active node or null (alias for `tree.activeNode`).
+     * Alias for {@link Wunderbaum.activeNode}.
+     *
+     * @see {@link WunderbaumNode.setActive}
+     * @see {@link WunderbaumNode.isActive}
+     * @see {@link Wunderbaum.activeNode}
+     * @see {@link Wunderbaum.focusNode}
      */
     getActiveNode() {
         return this.activeNode;
@@ -6361,7 +7064,12 @@ class Wunderbaum {
         return this.root.getFirstChild();
     }
     /**
-     * Return the currently active node or null.
+     * Return the node that currently has keyboard focus or null.
+     * Alias for {@link Wunderbaum.focusNode}.
+     * @see {@link WunderbaumNode.setFocus}
+     * @see {@link WunderbaumNode.hasFocus}
+     * @see {@link Wunderbaum.activeNode}
+     * @see {@link Wunderbaum.focusNode}
      */
     getFocusNode() {
         return this.focusNode;
@@ -6373,7 +7081,12 @@ class Wunderbaum {
      *     TYPE: 'title' | 'prefix' | 'expander' | 'checkbox' | 'icon' | undefined
      */
     static getEventInfo(event) {
-        let target = event.target, cl = target.classList, parentCol = target.closest("span.wb-col"), node = Wunderbaum.getNode(target), tree = node ? node.tree : Wunderbaum.getTree(event), res = {
+        const target = event.target;
+        const cl = target.classList;
+        const parentCol = target.closest("span.wb-col");
+        const node = Wunderbaum.getNode(target);
+        const tree = node ? node.tree : Wunderbaum.getTree(event);
+        const res = {
             event: event,
             canonicalName: eventToString(event),
             tree: tree,
@@ -6414,7 +7127,7 @@ class Wunderbaum {
         else {
             // Somewhere near the title
             if (event.type !== "mousemove" && !(event instanceof KeyboardEvent)) {
-                console.warn("getEventInfo(): not found", event, res);
+                tree === null || tree === void 0 ? void 0 : tree.logWarn("getEventInfo(): not found", event, res);
             }
             return res;
         }
@@ -6433,15 +7146,26 @@ class Wunderbaum {
     toString() {
         return `Wunderbaum<'${this.id}'>`;
     }
-    /** Return true if any node is currently in edit-title mode. */
+    /** Return true if any node title or grid cell is currently beeing edited.
+     *
+     * See also {@link Wunderbaum.isEditingTitle}.
+     */
     isEditing() {
+        const focusElem = this.nodeListElement.querySelector("input:focus,select:focus");
+        return !!focusElem;
+    }
+    /** Return true if any node is currently in edit-title mode.
+     *
+     * See also {@link WunderbaumNode.isEditingTitle} and {@link Wunderbaum.isEditing}.
+     */
+    isEditingTitle() {
         return this._callMethod("edit.isEditingTitle");
     }
     /**
      * Return true if any node is currently beeing loaded, i.e. a Ajax request is pending.
      */
     isLoading() {
-        var res = false;
+        let res = false;
         this.root.visit((n) => {
             // also visit rootNode
             if (n._isLoading || n._requestId) {
@@ -6451,47 +7175,65 @@ class Wunderbaum {
         }, true);
         return res;
     }
-    /** Log to console if opts.debugLevel >= 4 */
+    /** Write to `console.log` with tree name as prefix if opts.debugLevel >= 4.
+     * @see {@link Wunderbaum.logDebug}
+     */
+    log(...args) {
+        if (this.options.debugLevel >= 4) {
+            console.log(this.toString(), ...args); // eslint-disable-line no-console
+        }
+    }
+    /** Write to `console.debug`  with tree name as prefix if opts.debugLevel >= 4.
+     * and browser console level includes debug/verbose messages.
+     * @see {@link Wunderbaum.log}
+     */
     logDebug(...args) {
         if (this.options.debugLevel >= 4) {
-            Array.prototype.unshift.call(args, this.toString());
-            console.log.apply(console, args);
+            console.debug(this.toString(), ...args); // eslint-disable-line no-console
         }
     }
-    /** Log error to console. */
+    /** Write to `console.error` with tree name as prefix. */
     logError(...args) {
         if (this.options.debugLevel >= 1) {
-            Array.prototype.unshift.call(args, this.toString());
-            console.error.apply(console, args);
+            console.error(this.toString(), ...args); // eslint-disable-line no-console
         }
     }
-    /** Log to console if opts.debugLevel >= 3 */
+    /** Write to `console.info`  with tree name as prefix if opts.debugLevel >= 3. */
     logInfo(...args) {
         if (this.options.debugLevel >= 3) {
-            Array.prototype.unshift.call(args, this.toString());
-            console.info.apply(console, args);
+            console.info(this.toString(), ...args); // eslint-disable-line no-console
         }
     }
     /** @internal */
     logTime(label) {
         if (this.options.debugLevel >= 4) {
-            console.time(this + ": " + label);
+            console.time(this + ": " + label); // eslint-disable-line no-console
         }
         return label;
     }
     /** @internal */
     logTimeEnd(label) {
         if (this.options.debugLevel >= 4) {
-            console.timeEnd(this + ": " + label);
+            console.timeEnd(this + ": " + label); // eslint-disable-line no-console
         }
     }
-    /** Log to console if opts.debugLevel >= 2 */
+    /** Write to `console.warn` with tree name as prefix with if opts.debugLevel >= 2. */
     logWarn(...args) {
         if (this.options.debugLevel >= 2) {
-            Array.prototype.unshift.call(args, this.toString());
-            console.warn.apply(console, args);
+            console.warn(this.toString(), ...args); // eslint-disable-line no-console
         }
     }
+    /** Reset column widths to default. @since 0.10.0 */
+    resetColumns() {
+        this.columns.forEach((col) => {
+            delete col.customWidthPx;
+        });
+        this.update(ChangeType.colStructure);
+    }
+    // /** Renumber nodes `_nativeIndex`. @see {@link WunderbaumNode.resetNativeChildOrder} */
+    // resetNativeChildOrder(options?: ResetOrderOptions) {
+    //   this.root.resetNativeChildOrder(options);
+    // }
     /**
      * Make sure that this node is vertically scrolled into the viewport.
      *
@@ -6509,7 +7251,7 @@ class Wunderbaum {
             options = nodeOrOpts;
             node = options.node;
         }
-        assert(node && node._rowIdx != null);
+        assert(node && node._rowIdx != null, `Invalid node: ${node}`);
         const scrollParent = this.element;
         const headerHeight = this.headerElement.clientHeight; // May be 0
         const scrollTop = scrollParent.scrollTop;
@@ -6574,42 +7316,66 @@ class Wunderbaum {
     /**
      * Set column #colIdx to 'active'.
      *
-     * This higlights the column header and -cells by adding the `wb-active` class.
+     * This higlights the column header and -cells by adding the `wb-active`
+     * class to all grid cells of the active column. <br>
      * Available in cell-nav mode only.
+     *
+     * If _options.edit_ is true, the embedded input element is focused, or if
+     * colIdx is 0, the node title is put into edit mode.
      */
-    setColumn(colIdx) {
-        var _a;
-        assert(this.isCellNav());
-        assert(0 <= colIdx && colIdx < this.columns.length);
+    setColumn(colIdx, options) {
+        var _a, _b, _c;
+        const edit = options === null || options === void 0 ? void 0 : options.edit;
+        const scroll = (options === null || options === void 0 ? void 0 : options.scrollIntoView) !== false;
+        assert(this.isCellNav(), "Expected cellNav mode");
+        if (typeof colIdx === "string") {
+            const cid = colIdx;
+            colIdx = this.columns.findIndex((c) => c.id === colIdx);
+            assert(colIdx >= 0, `Invalid colId: ${cid}`);
+        }
+        assert(0 <= colIdx && colIdx < this.columns.length, `Invalid colIdx: ${colIdx}`);
         this.activeColIdx = colIdx;
         // Update `wb-active` class for all headers
         if (this.hasHeader()) {
-            for (let rowDiv of this.headerElement.children) {
+            for (const rowDiv of this.headerElement.children) {
                 let i = 0;
-                for (let colDiv of rowDiv.children) {
+                for (const colDiv of rowDiv.children) {
                     colDiv.classList.toggle("wb-active", i++ === colIdx);
                 }
             }
         }
         (_a = this.activeNode) === null || _a === void 0 ? void 0 : _a.update(ChangeType.status);
         // Update `wb-active` class for all cell spans
-        for (let rowDiv of this.nodeListElement.children) {
+        for (const rowDiv of this.nodeListElement.children) {
             let i = 0;
-            for (let colDiv of rowDiv.children) {
+            for (const colDiv of rowDiv.children) {
                 colDiv.classList.toggle("wb-active", i++ === colIdx);
             }
         }
-        // Vertical scroll into view
-        // if (this.options.fixedCol) {
-        this.scrollToHorz();
-        // }
+        // Horizontically scroll into view
+        if (scroll || edit) {
+            this.scrollToHorz();
+        }
+        if (edit && this.activeNode) {
+            // this.activeNode.setFocus(); // Blur prev. input if any
+            if (colIdx === 0) {
+                this.activeNode.startEditTitle();
+            }
+            else {
+                (_c = (_b = this.getActiveColElem()) === null || _b === void 0 ? void 0 : _b.querySelector("input,select")) === null || _c === void 0 ? void 0 : _c.focus();
+            }
+        }
     }
-    /** Set or remove keybaord focus to the tree container. */
+    /* Set or remove keyboard focus to the tree container. @internal */
+    _setActiveNode(node) {
+        this._activeNode = node;
+    }
+    /** Set or remove keyboard focus to the tree container. */
     setActiveNode(key, flag = true, options) {
         var _a;
         (_a = this.findKey(key)) === null || _a === void 0 ? void 0 : _a.setActive(flag, options);
     }
-    /** Set or remove keybaord focus to the tree container. */
+    /** Set or remove keyboard focus to the tree container. */
     setFocus(flag = true) {
         if (flag) {
             this.element.focus();
@@ -6618,16 +7384,19 @@ class Wunderbaum {
             this.element.blur();
         }
     }
-    /**
-     * @deprecated since v0.3.6: use `update()` instead.
-     */
-    setModified(change, ...args) {
-        this.logWarn("setModified() is deprecated: use update() instead.");
-        // @ts-ignore
-        // (!) TS2556: A spread argument must either have a tuple type or be passed to a rest parameter.
-        return this.update.call(this, change, ...args);
+    /* Set or remove keyboard focus to the tree container. @internal */
+    _setFocusNode(node) {
+        this._focusNode = node;
     }
     update(change, node, options) {
+        // this.log(`update(${change}) node=${node}`);
+        if (!(node instanceof WunderbaumNode)) {
+            options = node;
+            node = undefined;
+        }
+        const immediate = !!getOption(options, "immediate");
+        const RF = RenderFlag;
+        const pending = this.pendingChangeTypes;
         if (this._disableUpdateCount) {
             // Assuming that we redraw all when enableUpdate() is re-enabled.
             // this.log(
@@ -6636,14 +7405,6 @@ class Wunderbaum {
             this._disableUpdateIgnoreCount++;
             return;
         }
-        // this.log(`update(${change}) node=${node}`);
-        if (!(node instanceof WunderbaumNode)) {
-            options = node;
-            node = null;
-        }
-        const immediate = !!getOption(options, "immediate");
-        const RF = RenderFlag;
-        const pending = this.pendingChangeTypes;
         switch (change) {
             case ChangeType.any:
             case ChangeType.colStructure:
@@ -6707,11 +7468,11 @@ class Wunderbaum {
     isGrid() {
         return this.columns && this.columns.length > 1;
     }
-    /** Return true if cell-navigation mode is acive. */
+    /** Return true if cell-navigation mode is active. */
     isCellNav() {
         return !!this._cellNavMode;
     }
-    /** Return true if row-navigation mode is acive. */
+    /** Return true if row-navigation mode is active. */
     isRowNav() {
         return !this._cellNavMode;
     }
@@ -6764,7 +7525,7 @@ class Wunderbaum {
     }
     /** Add or redefine node type definitions. */
     setTypes(types, replace = true) {
-        assert(isPlainObject(types));
+        assert(isPlainObject(types), `Expected plain objext: ${types}`);
         if (replace) {
             this.types = types;
         }
@@ -6772,7 +7533,7 @@ class Wunderbaum {
             extend(this.types, types);
         }
         // Convert `TYPE.classes` to a Set
-        for (let t of Object.values(this.types)) {
+        for (const t of Object.values(this.types)) {
             if (t.classes) {
                 t.classes = toSet(t.classes);
             }
@@ -6787,9 +7548,17 @@ class Wunderbaum {
     sortChildren(cmp = nodeTitleSorter, deep = false) {
         this.root.sortChildren(cmp, deep);
     }
+    /**
+     * Convenience method to implement column sorting.
+     * @see {@link WunderbaumNode.sortByProperty}.
+     * @since 0.11.0
+     */
+    sortByProperty(options) {
+        this.root.sortByProperty(options);
+    }
     /** Convert tree to an array of plain objects.
      *
-     * @param callback(dict, node) is called for every node, in order to allow
+     * @param callback is called for every node, in order to allow
      *     modifications.
      *     Return `false` to ignore this node or `"skip"` to include this node
      *     without its children.
@@ -6810,7 +7579,8 @@ class Wunderbaum {
         const defaultMinWidth = 4;
         const vpWidth = this.element.clientWidth;
         // Shorten last column width to avoid h-scrollbar
-        const FIX_ADJUST_LAST_COL = 2;
+        // (otherwise resizbing the demo would display a void scrollbar?)
+        const FIX_ADJUST_LAST_COL = 1;
         const columns = this.columns;
         const col0 = columns[0];
         let totalWidth = 0;
@@ -6827,9 +7597,9 @@ class Wunderbaum {
         }
         // Gather width definitions
         this._columnsById = {};
-        for (let col of columns) {
+        for (const col of columns) {
             this._columnsById[col.id] = col;
-            let cw = col.width;
+            const cw = col.customWidthPx ? `${col.customWidthPx}px` : col.width;
             if (col.id === "*" && col !== col0) {
                 throw new Error(`Column id '*' must be defined only once: '${col.title}'.`);
             }
@@ -6843,7 +7613,7 @@ class Wunderbaum {
             }
             else if (typeof cw === "string" && cw.endsWith("px")) {
                 col._weight = 0;
-                let px = parseFloat(cw.slice(0, -2));
+                const px = parseFloat(cw.slice(0, -2));
                 if (col._widthPx != px) {
                     modified = true;
                     col._widthPx = px;
@@ -6857,7 +7627,7 @@ class Wunderbaum {
         // Share remaining space between non-fixed columns
         const restPx = Math.max(0, vpWidth - fixedWidth);
         let ofsPx = 0;
-        for (let col of columns) {
+        for (const col of columns) {
             let minWidth;
             if (col._weight) {
                 const cmw = col.minWidth;
@@ -6899,19 +7669,25 @@ class Wunderbaum {
         // }
         return modified;
     }
+    _insertIcon(icon, elem) {
+        const iconElem = document.createElement("i");
+        iconElem.className = icon;
+        elem.appendChild(iconElem);
+    }
     /** Create/update header markup from `this.columns` definition.
      * @internal
      */
     _renderHeaderMarkup() {
-        assert(this.headerElement);
+        assert(this.headerElement, "Expected a headerElement");
         const wantHeader = this.hasHeader();
         setElemDisplay(this.headerElement, wantHeader);
         if (!wantHeader) {
             return;
         }
+        const iconMap = this.iconMap;
         const colCount = this.columns.length;
         const headerRow = this.headerElement.querySelector(".wb-row");
-        assert(headerRow);
+        assert(headerRow, "Expected a row in header element");
         headerRow.innerHTML = "<span class='wb-col'></span>".repeat(colCount);
         for (let i = 0; i < colCount; i++) {
             const col = this.columns[i];
@@ -6927,17 +7703,54 @@ class Wunderbaum {
             else {
                 col.classes ? colElem.classList.add(...col.classes.split(" ")) : 0;
             }
-            const title = escapeHtml(col.title || col.id);
+            // Add tooltip to column title
             let tooltip = "";
             if (col.tooltip) {
                 tooltip = escapeTooltip(col.tooltip);
                 tooltip = ` title="${tooltip}"`;
             }
-            let resizer = "";
-            if (i < colCount - 1) {
-                resizer = '<span class="wb-col-resizer"></span>';
+            // Add column header icons
+            let addMarkup = "";
+            // NOTE: we use CSS float: right to align icons, so they must be added in
+            // reverse order
+            if (toBool(col.menu, this.options.columnsMenu, false)) {
+                const iconClass = "wb-col-icon-menu " + iconMap.colMenu;
+                const icon = `<i data-command=menu class="wb-col-icon ${iconClass}"></i>`;
+                addMarkup += icon;
             }
-            colElem.innerHTML = `<span class="wb-col-title"${tooltip}>${title}</span>${resizer}`;
+            if (toBool(col.sortable, this.options.columnsSortable, false)) {
+                let iconClass = "wb-col-icon-sort " + iconMap.colSortable;
+                if (col.sortOrder) {
+                    iconClass += `wb-col-sort-${col.sortOrder}`;
+                    iconClass +=
+                        col.sortOrder === "asc" ? iconMap.colSortAsc : iconMap.colSortDesc;
+                }
+                const icon = `<i data-command=sort class="wb-col-icon ${iconClass}"></i>`;
+                addMarkup += icon;
+            }
+            if (toBool(col.filterable, this.options.columnsFilterable, false)) {
+                colElem.classList.toggle("wb-col-filter", !!col.filterActive);
+                let iconClass = "wb-col-icon-filter " + iconMap.colFilter;
+                if (col.filterActive) {
+                    iconClass += iconMap.colFilterActive;
+                }
+                const icon = `<i data-command=filter class="wb-col-icon ${iconClass}"></i>`;
+                addMarkup += icon;
+            }
+            // Add resizer to all but the last column
+            if (i < colCount - 1) {
+                if (toBool(col.resizable, this.options.columnsResizable, false)) {
+                    addMarkup +=
+                        '<span class="wb-col-resizer wb-col-resizer-active"></span>';
+                }
+                else {
+                    addMarkup += '<span class="wb-col-resizer"></span>';
+                }
+            }
+            // Create column header
+            const title = escapeHtml(col.title || col.id);
+            colElem.innerHTML = `<span class="wb-col-title"${tooltip}>${title}</span>${addMarkup}`;
+            // Highlight active column
             if (this.isCellNav()) {
                 colElem.classList.toggle("wb-active", i === this.activeColIdx);
             }
@@ -6970,9 +7783,13 @@ class Wunderbaum {
     _updateViewportImmediately() {
         var _a;
         if (this._disableUpdateCount) {
-            this.log(`_updateViewportImmediately() IGNORED (disable level: ${this._disableUpdateCount})`);
+            this.log(`_updateViewportImmediately() IGNORED (disable level: ${this._disableUpdateCount}).`);
             this._disableUpdateIgnoreCount++;
             return;
+        }
+        if (this._updateViewportThrottled.pending()) {
+            // this.logWarn(`_updateViewportImmediately() cancel pending timer.`);
+            this._updateViewportThrottled.cancel();
         }
         // Shorten container height to avoid v-scrollbar
         const FIX_ADJUST_HEIGHT = 1;
@@ -6986,17 +7803,15 @@ class Wunderbaum {
         }
         else {
             this.log("_updateViewportImmediately():", pending);
-            let height = this.listContainerElement.clientHeight;
-            // We cannot get the height for absolute positioned parent, so look at first col
-            // let headerHeight = this.headerElement.clientHeight
-            // let headerHeight = this.headerElement.children[0].children[0].clientHeight;
-            // const headerHeight = this.options.headerHeightPx;
-            const headerHeight = this.headerElement.clientHeight; // May be 0
-            const wantHeight = this.element.clientHeight - headerHeight - FIX_ADJUST_HEIGHT;
-            if (Math.abs(height - wantHeight) > 1.0) {
-                // this.log("resize", height, wantHeight);
-                this.listContainerElement.style.height = wantHeight + "px";
-                height = wantHeight;
+            if (this.options.adjustHeight !== false) {
+                let height = this.listContainerElement.clientHeight;
+                const headerHeight = this.headerElement.clientHeight; // May be 0
+                const wantHeight = this.element.clientHeight - headerHeight - FIX_ADJUST_HEIGHT;
+                if (Math.abs(height - wantHeight) > 1.0) {
+                    // this.log("resize", height, wantHeight);
+                    this.listContainerElement.style.height = wantHeight + "px";
+                    height = wantHeight;
+                }
             }
             // console.profile(`_updateViewportImmediately()`)
             if (pending.has(RF.clearMarkup)) {
@@ -7014,6 +7829,7 @@ class Wunderbaum {
             // console.profileEnd(`_updateViewportImmediately()`)
         }
         if (this.options.connectTopBreadcrumb) {
+            assert(this.options.connectTopBreadcrumb.textContent != null, `Invalid 'connectTopBreadcrumb' option (input element expected).`);
             let path = (_a = this.getTopmostVpNode(true)) === null || _a === void 0 ? void 0 : _a.getPath(false, "title", " > ");
             path = path ? path + " >" : "";
             this.options.connectTopBreadcrumb.textContent = path;
@@ -7079,9 +7895,6 @@ class Wunderbaum {
         }
         let endIdx = Math.max(0, (ofs + vp_height) / row_height + prefetch);
         endIdx = Math.ceil(endIdx);
-        // const obsoleteViewNodes = this.viewNodes;
-        // this.viewNodes = new Set();
-        // const viewNodes = this.viewNodes;
         // this.debug("render", opts);
         const obsoleteNodes = new Set();
         this.nodeListElement.childNodes.forEach((elem) => {
@@ -7172,7 +7985,9 @@ class Wunderbaum {
             return this._visitRowsUp(callback, options);
         }
         options = options || {};
-        let i, nextIdx, parent, res, siblings, stopNode, siblingOfs = 0, skipFirstNode = options.includeSelf === false, includeHidden = !!options.includeHidden, checkFilter = !includeHidden && this.filterMode === "hide", node = options.start || this.root.children[0];
+        let i, nextIdx, parent, res, siblings, stopNode, siblingOfs = 0, skipFirstNode = options.includeSelf === false, node = options.start || this.root.children[0];
+        const includeHidden = !!options.includeHidden;
+        const checkFilter = !includeHidden && this.filterMode === "hide";
         parent = node.parent;
         while (parent) {
             // visit siblings
@@ -7237,7 +8052,8 @@ class Wunderbaum {
      * @internal
      */
     _visitRowsUp(callback, options) {
-        let children, idx, parent, includeHidden = !!options.includeHidden, node = options.start || this.root.children[0];
+        let children, idx, parent, node = options.start || this.root.children[0];
+        const includeHidden = !!options.includeHidden;
         if (options.includeSelf !== false) {
             if (callback(node) === false) {
                 return false;
@@ -7334,37 +8150,49 @@ class Wunderbaum {
      * FILTER
      * -------------------------------------------------------------------------*/
     /**
-     * [ext-filter] Dim or hide nodes.
+     * Dim or hide unmatched nodes.
+     * @param filter a string to match against node titles, or a callback function.
+     * @param options filter options. Defaults to the `tree.options.filter` settings.
+     * @returns the number of nodes that match the filter.
+     * @example
+     * ```ts
+     * tree.filterNodes("foo", {mode: 'dim', fuzzy: true});
+     * // or pass a callback
+     * tree.filterNodes((node) => { return node.data.foo === true }, {mode: 'hide'});
+     * ```
      */
     filterNodes(filter, options) {
         return this.extensions.filter.filterNodes(filter, options);
     }
     /**
-     * [ext-filter] Dim or hide whole branches.
+     * Return the number of nodes that match the current filter.
+     * @see {@link Wunderbaum.filterNodes}
+     * @since 0.9.0
+     */
+    countMatches() {
+        return this.extensions.filter.countMatches();
+    }
+    /**
+     * Dim or hide whole branches.
+     * @deprecated Use {@link filterNodes} instead and set `options.matchBranch: true`.
      */
     filterBranches(filter, options) {
         return this.extensions.filter.filterBranches(filter, options);
     }
     /**
-     * [ext-filter] Reset the filter.
-     *
-     * @requires [[FilterExtension]]
+     * Reset the filter.
      */
     clearFilter() {
         return this.extensions.filter.clearFilter();
     }
     /**
-     * [ext-filter] Return true if a filter is currently applied.
-     *
-     * @requires [[FilterExtension]]
+     * Return true if a filter is currently applied.
      */
     isFilterActive() {
         return !!this.filterMode;
     }
     /**
-     * [ext-filter] Re-apply current filter.
-     *
-     * @requires [[FilterExtension]]
+     * Re-apply current filter.
      */
     updateFilter() {
         return this.extensions.filter.updateFilter();
@@ -7372,7 +8200,7 @@ class Wunderbaum {
 }
 Wunderbaum.sequence = 0;
 /** Wunderbaum release version number "MAJOR.MINOR.PATCH". */
-Wunderbaum.version = "v0.4.0"; // Set to semver by 'grunt release'
+Wunderbaum.version = "v0.11.0"; // Set to semver by 'grunt release'
 /** Expose some useful methods of the util.ts module as `Wunderbaum.util`. */
 Wunderbaum.util = util;
 

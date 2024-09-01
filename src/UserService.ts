@@ -37,13 +37,14 @@ export class UserService extends DatabaseService {
 
     public static readonly roleStudent = 'student' ;
     public static readonly roleMentor = 'mentor' ;
+    public static readonly schemaVersion = 1 ;
 
     nextkey_: number;
     users_: Map<string, User>;
     audit_ : AuditService;
 
     constructor(rootdir: string, audit: AuditService) {
-        super('UserService', path.join(rootdir, UserService.userFileName)) ;
+        super('UserService', path.join(rootdir, UserService.userFileName), UserService.schemaVersion, rootdir) ;
         
         this.audit_ = audit;
         this.nextkey_ = 0;
@@ -690,6 +691,10 @@ export class UserService extends DatabaseService {
     private hashPassword(pass: string): string {
         return crypto.createHash('sha256').update(pass).digest('hex');
     }
+
+    protected migrateTables(oldver: number, newver: number): void {
+        throw new Error("no new schema version available") ;
+    }    
 
     protected createTables() {
         let sql =

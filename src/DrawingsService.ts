@@ -17,13 +17,14 @@ interface LooseObject {
 
 export class DrawingsService extends DatabaseService {
     private static readonly userFileName: string = 'drawings.db';
+    public static readonly schemaVersion = 1 ;
 
     private robots_ : RobotService ;
     private users_ : UserService ;
     fsmgr_ : FileStorageManager;
 
     constructor(rootdir: string, robots: RobotService, users: UserService) {
-        super('drawing', path.join(rootdir, DrawingsService.userFileName));
+        super('drawing', path.join(rootdir, DrawingsService.userFileName), DrawingsService.schemaVersion, rootdir);
 
         this.robots_  = robots ;
         this.users_ = users ;
@@ -31,6 +32,11 @@ export class DrawingsService extends DatabaseService {
 
         this.robots_.setDrawingsService(this);
     }
+
+
+    protected migrateTables(oldver: number, newver: number): void {
+        throw new Error("no new schema version available") ;
+    }    
 
     protected createTables() {
         let sql =

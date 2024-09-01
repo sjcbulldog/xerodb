@@ -16,16 +16,22 @@ interface LooseObject {
 
 export class DashboardService extends DatabaseService {
     private static readonly userFileName: string = 'dashboard.db';
+    public static readonly schemaVersion = 1 ;
 
     private robots_ : RobotService ;
     private users_ : UserService ;
 
     constructor(rootdir: string, robots: RobotService, users: UserService) {
-        super('audit', path.join(rootdir, DashboardService.userFileName));
+        super('audit', path.join(rootdir, DashboardService.userFileName), DashboardService.schemaVersion, rootdir);
 
         this.robots_  = robots ;
         this.users_ = users ;
     }
+
+
+    protected migrateTables(oldver: number, newver: number): void {
+        throw new Error("no new schema version available") ;
+    }    
 
     protected createTables() {
         let sql =

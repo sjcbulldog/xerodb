@@ -316,6 +316,7 @@ function getOnePart() {
                     $('#quantity').val(data.quantity);
                     $('#partno').val(partnovalue);
                     $('#retplace').val(retplace);
+                    $('#location').val(data.location) ;
                 });
             });
         });
