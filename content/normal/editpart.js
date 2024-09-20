@@ -127,11 +127,11 @@ function stateChanged(e) {
     let st = e.target.value ;
     $('#nextstatelabel').html("'" + st + "' Date");
 
-    if (!checkStateChange()) {
-        // The state changed - prompt the user to change the new date
-        alert('You have changed to state, you also need to change the date for this next state') ;
-        $('#nextstatelabel').focus();
-    }
+    // if (!checkStateChange()) {
+    //     // The state changed - prompt the user to change the new date
+    //     alert('You have changed to state, you also need to change the date for this next state') ;
+    //     $('#nextstatelabel').focus();
+    // }
 }
 
 function setState(data, lastone) {
@@ -213,11 +213,11 @@ function doValidate(e) {
     if (xeroAttrs === null)
         return;
 
-    if (!checkStateChange()) {
-        alert('You have changed the state of the part. You need to update the Next Date which is the date when the part will leave this new state');
-        e.preventDefault();
-        return ;        
-    }
+    // if (!checkStateChange()) {
+    //     alert('You have changed the state of the part. You need to update the Next Date which is the date when the part will leave this new state');
+    //     e.preventDefault();
+    //     return ;        
+    // }
 
     for (var attr of xeroAttrs) {
         let input = document.getElementById(attr.key);
